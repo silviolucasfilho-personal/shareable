@@ -506,7 +506,7 @@ export default function MarkdownEditor({
                 ref={textareaRef}
                 value={content}
                 onChange={(e) => setContent(e.target.value)}
-                placeholder="Write your markdown content here... # Headers, **bold**, lists, ```code```"
+                placeholder="Write your markdown or HTML content here... # Headers, **bold**, <table>, ```code```, $$math$$"
                 className="w-full flex-1 p-2 font-mono text-sm leading-relaxed bg-transparent border-none outline-none resize-none text-neutral-900 dark:text-neutral-100 placeholder-neutral-400 selection:bg-blue-100 dark:selection:bg-blue-900/60"
               />
             </div>

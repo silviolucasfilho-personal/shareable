@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import matter from 'gray-matter';
+import TurndownService from 'turndown';
 import { createDocument } from '@/lib/storage';
 import { Document } from '@/lib/types';
 
@@ -9,12 +10,33 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Title, X-Folder, X-Tags, X-Filename',
 };
 
+const turndown = new TurndownService({
+  headingStyle: 'atx',
+  codeBlockStyle: 'fenced',
+});
+
+// Configure Turndown to keep table formatting intact
+turndown.keep(['table', 'thead', 'tbody', 'tr', 'th', 'td', 'details', 'summary', 'video', 'audio', 'iframe']);
+
 interface DocumentInput {
   title?: string;
   content: string;
   tags?: string[];
   folder?: string;
   isPublic?: boolean;
+}
+
+function isHtmlDocument(text: string, fileName?: string): boolean {
+  if (fileName && /\.(html|htm)$/i.test(fileName)) {
+    return true;
+  }
+  const trimmed = text.trim();
+  return (
+    trimmed.startsWith('<!DOCTYPE html') ||
+    /<html[\s>]/i.test(trimmed) ||
+    (/<head[\s>]/i.test(trimmed) && /<body[\s>]/i.test(trimmed)) ||
+    /<(h[1-6]|p|div|table|article|section)[\s>]/i.test(trimmed)
+  );
 }
 
 function parseDocumentContent(
@@ -29,7 +51,7 @@ function parseDocumentContent(
 ): DocumentInput {
   let title = overrides?.title?.trim() || '';
   if (!title && fileName) {
-    title = fileName.replace(/\.(md|markdown|txt)$/i, '');
+    title = fileName.replace(/\.(md|markdown|txt|html|htm)$/i, '');
   }
 
   let tags: string[] = [];
@@ -43,6 +65,7 @@ function parseDocumentContent(
   let isPublic = overrides?.isPublic !== undefined && overrides.isPublic !== null ? overrides.isPublic : true;
   let content = rawText;
 
+  // 1. First, parse YAML frontmatter if present
   try {
     const parsed = matter(rawText);
     if (!title && parsed.data.title && typeof parsed.data.title === 'string') {
@@ -70,9 +93,77 @@ function parseDocumentContent(
     content = rawText;
   }
 
-  // If title is still empty or is just filename, try to extract first Markdown # Heading
+  // 2. If the document is HTML, extract HTML metadata and convert body to clean Markdown
+  if (isHtmlDocument(content, fileName)) {
+    // Extract <title> if title not explicitly provided
+    const titleMatch = content.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+    if ((!title || (fileName && title === fileName.replace(/\.(md|markdown|txt|html|htm)$/i, ''))) && titleMatch) {
+      const extracted = titleMatch[1].replace(/<[^>]+>/g, '').trim();
+      if (extracted) {
+        title = extracted;
+      }
+    }
+
+    // Extract meta title
+    if (!title) {
+      const metaTitleMatch = content.match(/<meta[^>]*name=["']title["'][^>]*content=["']([^"']+)["']/i);
+      if (metaTitleMatch && metaTitleMatch[1].trim()) {
+        title = metaTitleMatch[1].trim();
+      }
+    }
+
+    // Extract meta keywords for tags
+    if (tags.length === 0) {
+      const kwMatch = content.match(/<meta[^>]*name=["']keywords["'][^>]*content=["']([^"']+)["']/i);
+      if (kwMatch && kwMatch[1]) {
+        tags = kwMatch[1].split(',').map((t) => t.trim()).filter(Boolean);
+      }
+    }
+
+    // Extract meta folder or category
+    if (!folder) {
+      const folderMeta = content.match(/<meta[^>]*name=["'](folder|category)["'][^>]*content=["']([^"']+)["']/i);
+      if (folderMeta && folderMeta[2]) {
+        folder = folderMeta[2].trim();
+      }
+    }
+
+    // Extract body content
+    const bodyMatch = content.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+    let bodyToConvert = bodyMatch ? bodyMatch[1] : content;
+
+    // Remove scripts and style tags for safety and clean content
+    bodyToConvert = bodyToConvert
+      .replace(/<script[\s\S]*?<\/script>/gi, '')
+      .replace(/<style[\s\S]*?<\/style>/gi, '');
+
+    // Extract <h1> if title is still default filename
+    if (!title || (fileName && title === fileName.replace(/\.(md|markdown|txt|html|htm)$/i, ''))) {
+      const h1Match = bodyToConvert.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i);
+      if (h1Match) {
+        const extractedH1 = h1Match[1].replace(/<[^>]+>/g, '').trim();
+        if (extractedH1) {
+          title = extractedH1;
+        }
+      }
+    }
+
+    // Convert HTML to clean Markdown
+    try {
+      const converted = turndown.turndown(bodyToConvert).trim();
+      if (converted) {
+        content = converted;
+      } else {
+        content = bodyToConvert.trim();
+      }
+    } catch {
+      content = bodyToConvert.trim();
+    }
+  }
+
+  // 3. If title is still empty or default filename, check for Markdown `# Heading`
   const headerMatch = content.match(/^#\s+(.+)$/m);
-  if (headerMatch && (!title || (fileName && title === fileName.replace(/\.(md|markdown|txt)$/i, '')))) {
+  if (headerMatch && (!title || (fileName && title === fileName.replace(/\.(md|markdown|txt|html|htm)$/i, '')))) {
     title = headerMatch[1].trim();
   }
 
@@ -109,18 +200,19 @@ export async function GET(request: NextRequest) {
     {
       name: 'Shareable Public Document Upload Endpoint',
       status: 'active',
-      description: 'Public API endpoint to upload Markdown and text documents directly to S3 storage.',
+      description: 'Public API endpoint to upload Markdown, HTML, and text documents directly to S3 storage.',
       methods: {
         POST: {
           description: 'Upload one or more documents',
           acceptedContentTypes: [
             'multipart/form-data',
             'text/markdown',
+            'text/html',
             'text/plain',
             'application/json',
           ],
           multipartFields: {
-            files: 'One or more files (.md, .markdown, .txt)',
+            files: 'One or more files (.md, .markdown, .txt, .html, .htm)',
             file: 'Alternative single-file field name',
             document: 'Alternative single-document field name',
             folder: '(Optional) Folder/category name to categorize documents under',
@@ -136,8 +228,9 @@ export async function GET(request: NextRequest) {
             'isPublic': 'Query param ?isPublic=true|false',
           },
           examples: {
-            curlMultipart: `curl -F "file=@example.md" -F "folder=Notes" ${baseUrl}/api/upload`,
+            curlMultipart: `curl -F "file=@example.html" -F "folder=Docs" ${baseUrl}/api/upload`,
             curlRawMarkdown: `curl -X POST -H "Content-Type: text/markdown" -H "X-Title: My Doc" --data-binary @example.md ${baseUrl}/api/upload`,
+            curlRawHtml: `curl -X POST -H "Content-Type: text/html" -H "X-Title: Web Report" --data-binary @report.html ${baseUrl}/api/upload`,
             curlJson: `curl -X POST -H "Content-Type: application/json" -d '{"title":"API Guide","content":"# Intro to API"}' ${baseUrl}/api/upload`,
           },
         },
@@ -225,10 +318,11 @@ export async function POST(request: NextRequest) {
         toCreate.push(parsed);
       }
     }
-    // 2. Handle raw markdown or plain text
+    // 2. Handle raw markdown, HTML, or plain text
     else if (
       contentType.includes('text/markdown') ||
       contentType.includes('text/plain') ||
+      contentType.includes('text/html') ||
       contentType.includes('application/octet-stream')
     ) {
       const rawText = await request.text();
@@ -298,7 +392,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json(
           {
             success: false,
-            error: 'Unsupported content-type or empty body. Send multipart/form-data, text/markdown, or application/json.',
+            error: 'Unsupported content-type or empty body. Send multipart/form-data, text/markdown, text/html, or application/json.',
           },
           { status: 400, headers: corsHeaders }
         );
