@@ -106,7 +106,36 @@ npm start
 | `DELETE` | `/api/documents/:id` | Remove document objects from S3 |
 | `POST` | `/api/documents/:id/share` | Regenerate share token or toggle visibility |
 | `GET` | `/api/share/:token` | Public view endpoint (increments view count in S3) |
-| `POST` | `/api/upload` | Upload `.md` files directly to S3 |
+| `GET` | `/api/upload` | Public upload API metadata and usage instructions |
+| `POST` | `/api/upload` | Public document upload endpoint (supports multipart, raw Markdown, and JSON with CORS) |
+| `OPTIONS` | `/api/upload` | CORS preflight handler for cross-origin uploads |
+
+### 📤 Public Upload Endpoint Usage
+
+The `/api/upload` endpoint is fully public and accepts documents in three formats:
+
+1. **Multipart Form Upload** (`multipart/form-data`):
+   ```bash
+   curl -F "file=@notes.md" -F "folder=Guides" http://localhost:3000/api/upload
+   ```
+   Supports form fields: `file`, `files` (batch), or `document`, plus optional `folder`, `title`, `tags`, and `isPublic`.
+
+2. **Raw Markdown / Text Body** (`text/markdown` or `text/plain`):
+   ```bash
+   curl -X POST http://localhost:3000/api/upload \
+     -H "Content-Type: text/markdown" \
+     -H "X-Title: My Document" \
+     -H "X-Folder: Documentation" \
+     --data "# Hello World\nUploaded directly via raw markdown."
+   ```
+
+3. **JSON Payload** (`application/json`):
+   ```bash
+   curl -X POST http://localhost:3000/api/upload \
+     -H "Content-Type: application/json" \
+     -d '{"title": "API Spec", "content": "# API Specification", "tags": ["api", "spec"], "folder": "Engineering"}'
+   ```
+
 
 ---
 

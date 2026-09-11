@@ -17,11 +17,27 @@ export interface S3StorageEngine {
 }
 
 export function isRealS3Configured(): boolean {
-  return Boolean(
-    process.env.S3_BUCKET_NAME &&
-    process.env.AWS_ACCESS_KEY_ID &&
-    process.env.AWS_SECRET_ACCESS_KEY
-  );
+  if (!process.env.S3_BUCKET_NAME) {
+    return false;
+  }
+
+  // 1. Static AWS credentials
+  if (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY) {
+    return true;
+  }
+
+  // 2. AWS IAM Roles (App Runner, ECS Task Role, EC2 Instance Profile, EKS, Lambda)
+  if (
+    process.env.USE_AWS_IAM_ROLE === 'true' ||
+    Boolean(process.env.AWS_CONTAINER_CREDENTIALS_RELATIVE_URI) ||
+    Boolean(process.env.AWS_CONTAINER_CREDENTIALS_FULL_URI) ||
+    Boolean(process.env.AWS_WEB_IDENTITY_TOKEN_FILE) ||
+    Boolean(process.env.AWS_EXECUTION_ENV)
+  ) {
+    return true;
+  }
+
+  return false;
 }
 
 // 1. Cloud S3 Storage Engine (AWS S3, MinIO, Cloudflare R2, LocalStack)
@@ -34,11 +50,16 @@ class AwsS3StorageEngine implements S3StorageEngine {
 
     const clientConfig: Record<string, unknown> = {
       region: process.env.AWS_REGION || 'us-east-1',
-      credentials: {
-        accessKeyId: process.env.AWS_ACCESS_KEY_ID || '',
-        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || '',
-      },
     };
+
+    // If static keys provided, pass them explicitly; otherwise @aws-sdk/client-s3 resolves
+    // credentials automatically via default provider chain (IAM Roles, ECS Task Roles, etc.)
+    if (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY) {
+      clientConfig.credentials = {
+        accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+      };
+    }
 
     if (process.env.S3_ENDPOINT) {
       clientConfig.endpoint = process.env.S3_ENDPOINT;
