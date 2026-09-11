@@ -3,8 +3,11 @@
 import React, { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
 import rehypeHighlight from 'rehype-highlight';
 import rehypeSlug from 'rehype-slug';
+import 'katex/dist/katex.min.css';
 import { Check, Copy, ExternalLink } from 'lucide-react';
 
 interface MarkdownRendererProps {
@@ -69,8 +72,8 @@ export default function MarkdownRenderer({ content, className = '' }: MarkdownRe
   return (
     <div className={`prose prose-neutral dark:prose-invert max-w-none ${className}`}>
       <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        rehypePlugins={[rehypeHighlight, rehypeSlug]}
+        remarkPlugins={[remarkGfm, remarkMath]}
+        rehypePlugins={[rehypeKatex, rehypeHighlight, rehypeSlug]}
         components={{
           code: CodeBlock,
           a: ({ href, children, ...props }) => {
