@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDocuments, createDocument, getRepositoryStats, getAllTags, getAllFolders } from '@/lib/storage';
 import { DocumentFilter } from '@/lib/types';
+import { getAuthenticatedUser } from '@/lib/amplify-server-utils';
 
 export async function GET(request: NextRequest) {
   try {
@@ -10,6 +11,9 @@ export async function GET(request: NextRequest) {
     const folder = searchParams.get('folder') || undefined;
     const isPublicParam = searchParams.get('isPublic');
     const sortBy = (searchParams.get('sortBy') as DocumentFilter['sortBy']) || 'updated_desc';
+    const scope = (searchParams.get('scope') as DocumentFilter['scope']) || 'all';
+
+    const caller = await getAuthenticatedUser(request);
 
     const filter: DocumentFilter = {
       query,
@@ -17,6 +21,9 @@ export async function GET(request: NextRequest) {
       folder,
       isPublic: isPublicParam !== null ? isPublicParam === 'true' : undefined,
       sortBy,
+      scope,
+      userEmail: caller?.email,
+      userId: caller?.userId,
     };
 
     const [documents, stats, tags, folders] = await Promise.all([
@@ -32,6 +39,7 @@ export async function GET(request: NextRequest) {
       stats,
       tags,
       folders,
+      currentUser: caller,
     });
   } catch (error) {
     console.error('Failed to fetch documents from S3:', error);
@@ -44,6 +52,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const caller = await getAuthenticatedUser(request);
     const body = await request.json();
     const { title, content, tags, folder, isPublic } = body;
 
@@ -60,6 +69,9 @@ export async function POST(request: NextRequest) {
       tags: Array.isArray(tags) ? tags : [],
       folder: typeof folder === 'string' ? folder : '',
       isPublic: isPublic !== false,
+      ownerId: caller?.userId,
+      ownerEmail: caller?.email,
+      collaborators: [],
     });
 
     return NextResponse.json({ success: true, document: doc }, { status: 201 });

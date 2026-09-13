@@ -7,6 +7,7 @@ import DocumentCard from '@/components/DocumentCard';
 import ShareModal from '@/components/ShareModal';
 import UploadModal from '@/components/UploadModal';
 import { Document, DocumentSummary } from '@/lib/types';
+import { useAuth } from '@/lib/auth-context';
 import {
   Search,
   Folder,
@@ -24,9 +25,12 @@ import {
   SlidersHorizontal,
   X,
   BookOpen,
+  UserCheck,
+  Users,
 } from 'lucide-react';
 
 export default function RepositoryDashboard() {
+  const { user, signInWithGoogle } = useAuth();
   const [documents, setDocuments] = useState<DocumentSummary[]>([]);
   const [stats, setStats] = useState<{
     totalDocuments: number;
@@ -44,6 +48,7 @@ export default function RepositoryDashboard() {
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedScope, setSelectedScope] = useState<'all' | 'mine' | 'shared'>('all');
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const [selectedFolder, setSelectedFolder] = useState<string | null>(null);
   const [filterPublic, setFilterPublic] = useState<boolean | null>(null);
@@ -60,6 +65,7 @@ export default function RepositoryDashboard() {
     try {
       const params = new URLSearchParams();
       if (searchQuery.trim()) params.set('q', searchQuery.trim());
+      if (selectedScope !== 'all') params.set('scope', selectedScope);
       if (selectedTag) params.set('tag', selectedTag);
       if (selectedFolder) params.set('folder', selectedFolder);
       if (filterPublic !== null) params.set('isPublic', String(filterPublic));
@@ -78,7 +84,7 @@ export default function RepositoryDashboard() {
     } finally {
       setLoading(false);
     }
-  }, [searchQuery, selectedTag, selectedFolder, filterPublic, sortBy]);
+  }, [searchQuery, selectedScope, selectedTag, selectedFolder, filterPublic, sortBy]);
 
   useEffect(() => {
     fetchDocuments();
@@ -125,12 +131,19 @@ export default function RepositoryDashboard() {
 
   const clearAllFilters = () => {
     setSearchQuery('');
+    setSelectedScope('all');
     setSelectedTag(null);
     setSelectedFolder(null);
     setFilterPublic(null);
   };
 
-  const hasActiveFilters = Boolean(searchQuery || selectedTag || selectedFolder || filterPublic !== null);
+  const hasActiveFilters = Boolean(
+    searchQuery ||
+    selectedScope !== 'all' ||
+    selectedTag ||
+    selectedFolder ||
+    filterPublic !== null
+  );
 
   return (
     <div className="min-h-screen bg-neutral-50/60 dark:bg-neutral-950 text-neutral-900 dark:text-neutral-100 flex flex-col">
@@ -222,15 +235,18 @@ export default function RepositoryDashboard() {
               <div className="text-xs font-semibold text-neutral-400 uppercase tracking-wider px-2 mb-2">
                 Views
               </div>
+
+              {/* All Documents */}
               <button
                 type="button"
                 onClick={() => {
+                  setSelectedScope('all');
                   setSelectedFolder(null);
                   setSelectedTag(null);
                   setFilterPublic(null);
                 }}
                 className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition-colors cursor-pointer ${
-                  !selectedFolder && !selectedTag && filterPublic === null
+                  selectedScope === 'all' && !selectedFolder && !selectedTag && filterPublic === null
                     ? 'bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 font-semibold'
                     : 'text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800'
                 }`}
@@ -242,10 +258,66 @@ export default function RepositoryDashboard() {
                 <span>{stats.totalDocuments}</span>
               </button>
 
+              {/* My Documents (for signed-in users) */}
+              <button
+                type="button"
+                onClick={() => {
+                  if (!user) {
+                    signInWithGoogle();
+                    return;
+                  }
+                  setSelectedScope('mine');
+                  setSelectedFolder(null);
+                  setSelectedTag(null);
+                  setFilterPublic(null);
+                }}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition-colors cursor-pointer ${
+                  selectedScope === 'mine'
+                    ? 'bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 font-semibold'
+                    : 'text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800'
+                }`}
+              >
+                <span className="flex items-center gap-2">
+                  <UserCheck className="w-4 h-4 text-blue-500" />
+                  My Documents
+                </span>
+                {!user && <span className="text-[10px] text-neutral-400">Sign In</span>}
+              </button>
+
+              {/* Shared with Me */}
+              <button
+                type="button"
+                onClick={() => {
+                  if (!user) {
+                    signInWithGoogle();
+                    return;
+                  }
+                  setSelectedScope('shared');
+                  setSelectedFolder(null);
+                  setSelectedTag(null);
+                  setFilterPublic(null);
+                }}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition-colors cursor-pointer ${
+                  selectedScope === 'shared'
+                    ? 'bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 font-semibold'
+                    : 'text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800'
+                }`}
+              >
+                <span className="flex items-center gap-2">
+                  <Users className="w-4 h-4 text-indigo-500" />
+                  Shared with Me
+                </span>
+                {!user && <span className="text-[10px] text-neutral-400">Sign In</span>}
+              </button>
+
+              <div className="h-px bg-neutral-100 dark:bg-neutral-800 my-1" />
+
+              {/* Public in Repo */}
               <button
                 type="button"
                 onClick={() => {
                   setFilterPublic(true);
+                  setSelectedScope('all');
                   setSelectedFolder(null);
                   setSelectedTag(null);
                 }}
@@ -262,10 +334,12 @@ export default function RepositoryDashboard() {
                 <span>{stats.sharedDocuments}</span>
               </button>
 
+              {/* Unlisted Links */}
               <button
                 type="button"
                 onClick={() => {
                   setFilterPublic(false);
+                  setSelectedScope('all');
                   setSelectedFolder(null);
                   setSelectedTag(null);
                 }}
@@ -406,6 +480,14 @@ export default function RepositoryDashboard() {
             {hasActiveFilters && (
               <div className="flex flex-wrap items-center gap-2 text-xs">
                 <span className="text-neutral-400 font-medium">Filtering by:</span>
+                {selectedScope !== 'all' && (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 font-medium">
+                    {selectedScope === 'mine' ? 'My Documents' : 'Shared with Me'}
+                    <button onClick={() => setSelectedScope('all')} className="hover:text-blue-900 ml-1">
+                      ×
+                    </button>
+                  </span>
+                )}
                 {searchQuery && (
                   <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 font-medium">
                     &ldquo;{searchQuery}&rdquo;

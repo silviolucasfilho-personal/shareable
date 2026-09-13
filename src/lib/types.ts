@@ -1,3 +1,18 @@
+export interface DocumentAuthor {
+  id?: string;
+  name?: string;
+  email?: string;
+  image?: string;
+}
+
+export type CollaboratorRole = 'viewer' | 'editor';
+
+export interface Collaborator {
+  email: string;
+  role: CollaboratorRole;
+  addedAt: string;
+}
+
 export interface Document {
   id: string;
   slug: string;
@@ -10,6 +25,9 @@ export interface Document {
   viewCount: number;
   createdAt: string;
   updatedAt: string;
+  ownerId?: string;
+  ownerEmail?: string;
+  collaborators?: Collaborator[];
 }
 
 export interface DocumentSummary {
@@ -26,6 +44,9 @@ export interface DocumentSummary {
   readingTimeMinutes: number;
   createdAt: string;
   updatedAt: string;
+  ownerId?: string;
+  ownerEmail?: string;
+  collaborators?: Collaborator[];
 }
 
 export interface CreateDocumentInput {
@@ -34,6 +55,9 @@ export interface CreateDocumentInput {
   tags?: string[];
   folder?: string;
   isPublic?: boolean;
+  ownerId?: string;
+  ownerEmail?: string;
+  collaborators?: Collaborator[];
 }
 
 export interface UpdateDocumentInput {
@@ -43,6 +67,9 @@ export interface UpdateDocumentInput {
   folder?: string;
   isPublic?: boolean;
   slug?: string;
+  ownerId?: string;
+  ownerEmail?: string;
+  collaborators?: Collaborator[];
 }
 
 export interface DocumentFilter {
@@ -51,6 +78,9 @@ export interface DocumentFilter {
   folder?: string;
   isPublic?: boolean;
   sortBy?: 'updated_desc' | 'created_desc' | 'title_asc' | 'views_desc';
+  scope?: 'all' | 'mine' | 'shared';
+  userEmail?: string;
+  userId?: string;
 }
 
 export interface TOCItem {
