@@ -64,6 +64,9 @@ async function rebuildIndex(): Promise<DocumentSummary[]> {
           readingTimeMinutes: calculateReadingTime(content),
           createdAt: doc.createdAt,
           updatedAt: doc.updatedAt,
+          ownerId: doc.ownerId,
+          ownerEmail: doc.ownerEmail,
+          collaborators: doc.collaborators || [],
         });
       }
     } catch (err) {
@@ -287,7 +290,23 @@ export async function getDocuments(filter: DocumentFilter = {}): Promise<Documen
   const index = await getIndex();
   let results = [...index];
 
-  const { query, tag, folder, isPublic, sortBy = 'updated_desc' } = filter;
+  const { query, tag, folder, isPublic, sortBy = 'updated_desc', scope, userEmail, userId } = filter;
+
+  if (scope === 'mine' && (userId || userEmail)) {
+    const normalizedEmail = userEmail?.toLowerCase();
+    results = results.filter((d) => {
+      if (userId && d.ownerId && d.ownerId === userId) return true;
+      if (normalizedEmail && d.ownerEmail && d.ownerEmail.toLowerCase() === normalizedEmail) return true;
+      return false;
+    });
+  } else if (scope === 'shared' && userEmail) {
+    const normalizedEmail = userEmail.toLowerCase();
+    results = results.filter((d) => {
+      const isOwner = (userId && d.ownerId === userId) || (d.ownerEmail?.toLowerCase() === normalizedEmail);
+      if (isOwner) return false;
+      return d.collaborators?.some((c) => c.email.toLowerCase() === normalizedEmail);
+    });
+  }
 
   if (query && query.trim()) {
     const q = query.trim().toLowerCase();
@@ -407,6 +426,10 @@ export async function createDocument(input: CreateDocumentInput): Promise<Docume
   const folder = (input.folder || '').trim();
   const isPublic = input.isPublic !== false;
 
+  const ownerId = input.ownerId;
+  const ownerEmail = input.ownerEmail;
+  const collaborators = input.collaborators || [];
+
   const doc: Document = {
     id,
     slug,
@@ -419,6 +442,9 @@ export async function createDocument(input: CreateDocumentInput): Promise<Docume
     viewCount: 0,
     createdAt: now,
     updatedAt: now,
+    ownerId,
+    ownerEmail,
+    collaborators,
   };
 
   // 1. Put document content in S3
@@ -454,6 +480,9 @@ export async function createDocument(input: CreateDocumentInput): Promise<Docume
     readingTimeMinutes: calculateReadingTime(content),
     createdAt: now,
     updatedAt: now,
+    ownerId,
+    ownerEmail,
+    collaborators,
   };
 
   index.unshift(summary);
@@ -475,6 +504,9 @@ export async function updateDocument(id: string, input: UpdateDocumentInput): Pr
   const newFolder = input.folder !== undefined ? input.folder.trim() : existing.folder;
   const newIsPublic = input.isPublic !== undefined ? input.isPublic : existing.isPublic;
   const newSlug = input.slug !== undefined && input.slug.trim() ? input.slug.trim() : existing.slug;
+  const newOwnerId = input.ownerId !== undefined ? input.ownerId : existing.ownerId;
+  const newOwnerEmail = input.ownerEmail !== undefined ? input.ownerEmail : existing.ownerEmail;
+  const newCollaborators = input.collaborators !== undefined ? input.collaborators : (existing.collaborators || []);
 
   const updatedDoc: Document = {
     ...existing,
@@ -484,6 +516,9 @@ export async function updateDocument(id: string, input: UpdateDocumentInput): Pr
     folder: newFolder,
     isPublic: newIsPublic,
     slug: newSlug,
+    ownerId: newOwnerId,
+    ownerEmail: newOwnerEmail,
+    collaborators: newCollaborators,
     updatedAt: now,
   };
 
@@ -511,6 +546,9 @@ export async function updateDocument(id: string, input: UpdateDocumentInput): Pr
       folder: newFolder,
       isPublic: newIsPublic,
       slug: newSlug,
+      ownerId: newOwnerId,
+      ownerEmail: newOwnerEmail,
+      collaborators: newCollaborators,
       wordCount: countWords(newContent),
       readingTimeMinutes: calculateReadingTime(newContent),
       updatedAt: now,
@@ -661,3 +699,38 @@ export async function getRepositoryStats() {
     storage: getStorageInfo(),
   };
 }
+
+export async function addCollaborator(
+  id: string,
+  collaborator: { email: string; role: 'viewer' | 'editor' }
+): Promise<Document | null> {
+  const doc = await getDocumentById(id);
+  if (!doc) return null;
+
+  const email = collaborator.email.toLowerCase().trim();
+  const existingCollaborators = doc.collaborators || [];
+  const filtered = existingCollaborators.filter((c) => c.email.toLowerCase() !== email);
+
+  const updatedCollaborators = [
+    ...filtered,
+    {
+      email,
+      role: collaborator.role,
+      addedAt: new Date().toISOString(),
+    },
+  ];
+
+  return updateDocument(id, { collaborators: updatedCollaborators });
+}
+
+export async function removeCollaborator(id: string, email: string): Promise<Document | null> {
+  const doc = await getDocumentById(id);
+  if (!doc) return null;
+
+  const targetEmail = email.toLowerCase().trim();
+  const existingCollaborators = doc.collaborators || [];
+  const updatedCollaborators = existingCollaborators.filter((c) => c.email.toLowerCase() !== targetEmail);
+
+  return updateDocument(id, { collaborators: updatedCollaborators });
+}
+

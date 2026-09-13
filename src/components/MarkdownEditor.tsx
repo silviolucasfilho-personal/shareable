@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   Bold,
   Italic,
@@ -47,12 +47,14 @@ interface MarkdownEditorProps {
     isPublic: boolean;
   }) => Promise<Document | null>;
   onOpenShare?: (doc: Document) => void;
+  readOnly?: boolean;
 }
 
 export default function MarkdownEditor({
   initialDocument,
   onSave,
   onOpenShare,
+  readOnly = false,
 }: MarkdownEditorProps) {
   const [title, setTitle] = useState(initialDocument?.title || '');
   const [content, setContent] = useState(initialDocument?.content || '');
@@ -61,7 +63,7 @@ export default function MarkdownEditor({
   const [tagInput, setTagInput] = useState('');
   const [isPublic, setIsPublic] = useState(initialDocument?.isPublic ?? true);
 
-  const [viewMode, setViewMode] = useState<'split' | 'edit' | 'preview'>('split');
+  const [viewMode, setViewMode] = useState<'split' | 'edit' | 'preview'>(readOnly ? 'preview' : 'split');
   const [isSaving, setIsSaving] = useState(false);
   const [isSaved, setIsSaved] = useState(true);
   const [copied, setCopied] = useState(false);
@@ -71,30 +73,13 @@ export default function MarkdownEditor({
 
   // Set default view mode on mobile screens
   useEffect(() => {
-    if (window.innerWidth < 768) {
+    if (window.innerWidth < 768 && !readOnly) {
       setViewMode('edit');
     }
-  }, []);
+  }, [readOnly]);
 
-  // Update dirty state
-  useEffect(() => {
-    setIsSaved(false);
-  }, [title, content, folder, tags, isPublic]);
-
-  // Keyboard shortcut for Cmd/Ctrl+S
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 's') {
-        e.preventDefault();
-        handleSave();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  });
-
-  const handleSave = async () => {
-    if (isSaving) return;
+  const handleSave = useCallback(async () => {
+    if (readOnly || isSaving) return;
     setIsSaving(true);
     try {
       const doc = await onSave({
@@ -113,7 +98,19 @@ export default function MarkdownEditor({
     } finally {
       setIsSaving(false);
     }
-  };
+  }, [readOnly, isSaving, onSave, title, content, tags, folder, isPublic]);
+
+  // Keyboard shortcut for Cmd/Ctrl+S
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 's') {
+        e.preventDefault();
+        handleSave();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleSave]);
 
   const insertFormatting = (before: string, after: string = '', defaultText: string = '') => {
     const textarea = textareaRef.current;
@@ -276,14 +273,21 @@ export default function MarkdownEditor({
             <Download className="w-4 h-4" />
           </button>
 
-          <button
-            onClick={handleSave}
-            disabled={isSaving}
-            className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs sm:text-sm font-medium transition-colors shadow-xs cursor-pointer"
-          >
-            <Save className="w-3.5 h-3.5" />
-            <span>{isSaving ? 'Saving...' : 'Save'}</span>
-          </button>
+          {readOnly ? (
+            <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800/60 text-xs font-medium">
+              <Eye className="w-3.5 h-3.5" />
+              <span>View Only</span>
+            </div>
+          ) : (
+            <button
+              onClick={handleSave}
+              disabled={isSaving}
+              className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs sm:text-sm font-medium transition-colors shadow-xs cursor-pointer"
+            >
+              <Save className="w-3.5 h-3.5" />
+              <span>{isSaving ? 'Saving...' : 'Save'}</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -293,8 +297,9 @@ export default function MarkdownEditor({
           type="text"
           placeholder="Document Title..."
           value={title}
+          disabled={readOnly}
           onChange={(e) => setTitle(e.target.value)}
-          className="w-full text-2xl sm:text-3xl font-bold bg-transparent border-none outline-none text-neutral-900 dark:text-white placeholder-neutral-300 dark:placeholder-neutral-700"
+          className="w-full text-2xl sm:text-3xl font-bold bg-transparent border-none outline-none text-neutral-900 dark:text-white placeholder-neutral-300 dark:placeholder-neutral-700 disabled:opacity-90"
         />
 
         <div className="flex flex-wrap items-center gap-3 text-xs">
@@ -305,8 +310,9 @@ export default function MarkdownEditor({
               type="text"
               placeholder="Folder (optional)"
               value={folder}
+              disabled={readOnly}
               onChange={(e) => setFolder(e.target.value)}
-              className="bg-transparent border-none outline-none text-neutral-700 dark:text-neutral-300 w-32 placeholder-neutral-400"
+              className="bg-transparent border-none outline-none text-neutral-700 dark:text-neutral-300 w-32 placeholder-neutral-400 disabled:opacity-80"
             />
           </div>
 
@@ -319,23 +325,27 @@ export default function MarkdownEditor({
                 className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 text-[11px]"
               >
                 #{t}
-                <button
-                  type="button"
-                  onClick={() => handleRemoveTag(t)}
-                  className="hover:text-red-500 transition-colors ml-0.5"
-                >
-                  ×
-                </button>
+                {!readOnly && (
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveTag(t)}
+                    className="hover:text-red-500 transition-colors ml-0.5"
+                  >
+                    ×
+                  </button>
+                )}
               </span>
             ))}
-            <input
-              type="text"
-              placeholder="Add tag + Enter"
-              value={tagInput}
-              onChange={(e) => setTagInput(e.target.value)}
-              onKeyDown={handleAddTag}
-              className="bg-transparent border-none outline-none text-neutral-700 dark:text-neutral-300 w-28 placeholder-neutral-400 text-xs"
-            />
+            {!readOnly && (
+              <input
+                type="text"
+                placeholder="Add tag + Enter"
+                value={tagInput}
+                onChange={(e) => setTagInput(e.target.value)}
+                onKeyDown={handleAddTag}
+                className="bg-transparent border-none outline-none text-neutral-700 dark:text-neutral-300 w-28 placeholder-neutral-400 text-xs"
+              />
+            )}
           </div>
 
           {/* Metrics */}

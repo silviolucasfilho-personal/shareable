@@ -12,10 +12,11 @@ import {
   Clock,
   Globe,
   Lock,
-  Download,
   Trash2,
   Edit3,
+  Users,
 } from 'lucide-react';
+import { useAuth } from '@/lib/auth-context';
 
 interface DocumentCardProps {
   document: DocumentSummary;
@@ -32,11 +33,21 @@ export default function DocumentCard({
   onSelectTag,
   onSelectFolder,
 }: DocumentCardProps) {
-  const handleDownload = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    window.open(`/api/documents/${doc.id}`, '_blank');
-  };
+  const { user } = useAuth();
+
+  const userEmail = user?.email?.toLowerCase();
+  const isOwner =
+    !doc.ownerEmail ||
+    !userEmail ||
+    doc.ownerEmail.toLowerCase() === userEmail ||
+    (doc.ownerId && doc.ownerId === user?.userId);
+
+  const collaboratorInfo = userEmail
+    ? doc.collaborators?.find((c) => c.email.toLowerCase() === userEmail)
+    : undefined;
+
+  const isSharedWithUser = Boolean(collaboratorInfo);
+  const canEdit = isOwner || collaboratorInfo?.role === 'editor';
 
   return (
     <div className="group relative flex flex-col justify-between rounded-2xl border border-neutral-200/90 dark:border-neutral-800/90 bg-white dark:bg-neutral-900 p-5 shadow-xs hover:shadow-md hover:border-neutral-300 dark:hover:border-neutral-700 transition-all duration-150">
@@ -62,6 +73,13 @@ export default function DocumentCard({
                 <span>Markdown</span>
               </span>
             )}
+
+            {isSharedWithUser && (
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/40 text-[10px] font-semibold text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800/60">
+                <Users className="w-2.5 h-2.5" />
+                <span>Shared ({collaboratorInfo?.role})</span>
+              </span>
+            )}
           </div>
 
           <div className="flex items-center gap-1.5 shrink-0">
@@ -76,17 +94,17 @@ export default function DocumentCard({
             ) : (
               <span
                 className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950/40 text-[11px] font-medium text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800/60"
-                title="Unlisted link only"
+                title="Unlisted or restricted to invited people"
               >
                 <Lock className="w-2.5 h-2.5" />
-                <span>Unlisted</span>
+                <span>Restricted</span>
               </span>
             )}
 
             <button
               onClick={() => onShare(doc)}
               className="p-1.5 rounded-lg text-neutral-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-neutral-800 transition-colors cursor-pointer"
-              title="Share document link"
+              title="Share document"
             >
               <Share2 className="w-4 h-4" />
             </button>
@@ -142,17 +160,20 @@ export default function DocumentCard({
           <Link
             href={`/doc/${doc.id}`}
             className="p-1.5 rounded-md text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
-            title="Edit Document"
+            title={canEdit ? "Edit Document" : "View Document"}
           >
             <Edit3 className="w-3.5 h-3.5" />
           </Link>
-          <button
-            onClick={() => onDelete(doc.id)}
-            className="p-1.5 rounded-md text-neutral-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors cursor-pointer"
-            title="Delete Document"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
+
+          {isOwner && (
+            <button
+              onClick={() => onDelete(doc.id)}
+              className="p-1.5 rounded-md text-neutral-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors cursor-pointer"
+              title="Delete Document (Owner only)"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
       </div>
     </div>
