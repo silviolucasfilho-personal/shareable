@@ -24,24 +24,31 @@ export function generateShareToken(): string {
 
 export function calculateReadingTime(text: string): number {
   const wordsPerMinute = 200;
-  const words = text.trim().split(/\s+/).filter(Boolean).length;
+  const words = countWords(text);
   return Math.max(1, Math.ceil(words / wordsPerMinute));
 }
 
 export function countWords(text: string): number {
-  return text.trim().split(/\s+/).filter(Boolean).length;
+  return text
+    .replace(/<[^>]+>/g, ' ')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean).length;
 }
 
-export function extractExcerpt(markdown: string, maxLength: number = 160): string {
-  // Strip code blocks, headers, images, links syntax for a clean plain text excerpt
-  const clean = markdown
+export function extractExcerpt(content: string, maxLength: number = 160): string {
+  // Strip code blocks, headers, HTML tags, images, links syntax for a clean plain text excerpt
+  const clean = content
     .replace(/```[\s\S]*?```/g, '')
     .replace(/`([^`]+)`/g, '$1')
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(/<[^>]+>/g, ' ')
     .replace(/!\[.*?\]\(.*?\)/g, '')
     .replace(/\[([^\]]+)\]\(.*?\)/g, '$1')
     .replace(/#{1,6}\s+/g, '')
     .replace(/[*_~>]/g, '')
-    .replace(/\n+/g, ' ')
+    .replace(/\s+/g, ' ')
     .trim();
 
   if (clean.length <= maxLength) return clean;
@@ -81,14 +88,16 @@ export function formatRelativeTime(isoString: string): string {
   }
 }
 
-export function extractHeadings(markdown: string): TOCItem[] {
-  const headingRegex = /^(#{1,4})\s+(.+)$/gm;
+export function extractHeadings(content: string): TOCItem[] {
   const items: TOCItem[] = [];
+
+  // 1. Match Markdown headings (e.g. ## Heading)
+  const mdHeadingRegex = /^(#{1,4})\s+(.+)$/gm;
   let match;
 
-  while ((match = headingRegex.exec(markdown)) !== null) {
+  while ((match = mdHeadingRegex.exec(content)) !== null) {
     const level = match[1].length;
-    const text = match[2].trim();
+    const text = match[2].replace(/<[^>]+>/g, '').trim();
     const id = text
       .toLowerCase()
       .replace(/[^\w\s-]/g, '')
@@ -96,5 +105,21 @@ export function extractHeadings(markdown: string): TOCItem[] {
     items.push({ id, text, level });
   }
 
+  // 2. Match HTML headings (e.g. <h1>Heading</h1>)
+  const htmlHeadingRegex = /<h([1-4])[^>]*>([\s\S]*?)<\/h\1>/gi;
+  while ((match = htmlHeadingRegex.exec(content)) !== null) {
+    const level = parseInt(match[1], 10);
+    const text = match[2].replace(/<[^>]+>/g, '').trim();
+    const id = text
+      .toLowerCase()
+      .replace(/[^\w\s-]/g, '')
+      .replace(/[\s_-]+/g, '-');
+    // Avoid duplicates if text already recorded
+    if (!items.some((item) => item.text === text)) {
+      items.push({ id, text, level });
+    }
+  }
+
   return items;
 }
+

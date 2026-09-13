@@ -17,11 +17,37 @@ export interface S3StorageEngine {
 }
 
 export function isRealS3Configured(): boolean {
-  return Boolean(
-    process.env.S3_BUCKET_NAME &&
-    process.env.AWS_ACCESS_KEY_ID &&
-    process.env.AWS_SECRET_ACCESS_KEY
-  );
+  const bucket = process.env.S3_BUCKET_NAME || process.env.BUCKET_NAME;
+  if (!bucket) {
+    return false;
+  }
+
+  const accessKey =
+    process.env.S3_ACCESS_KEY_ID ||
+    process.env.APP_AWS_ACCESS_KEY_ID ||
+    process.env.AWS_ACCESS_KEY_ID;
+  const secretKey =
+    process.env.S3_SECRET_ACCESS_KEY ||
+    process.env.APP_AWS_SECRET_ACCESS_KEY ||
+    process.env.AWS_SECRET_ACCESS_KEY;
+
+  // 1. Static AWS credentials (supports S3_ prefix for Amplify compatibility)
+  if (accessKey && secretKey) {
+    return true;
+  }
+
+  // 2. AWS IAM Roles (App Runner, ECS Task Role, EC2 Instance Profile, EKS, Lambda)
+  if (
+    process.env.USE_AWS_IAM_ROLE === 'true' ||
+    Boolean(process.env.AWS_CONTAINER_CREDENTIALS_RELATIVE_URI) ||
+    Boolean(process.env.AWS_CONTAINER_CREDENTIALS_FULL_URI) ||
+    Boolean(process.env.AWS_WEB_IDENTITY_TOKEN_FILE) ||
+    Boolean(process.env.AWS_EXECUTION_ENV)
+  ) {
+    return true;
+  }
+
+  return false;
 }
 
 // 1. Cloud S3 Storage Engine (AWS S3, MinIO, Cloudflare R2, LocalStack)
@@ -30,15 +56,31 @@ class AwsS3StorageEngine implements S3StorageEngine {
   private bucket: string;
 
   constructor() {
-    this.bucket = process.env.S3_BUCKET_NAME || 'shareable-markdown-docs';
+    this.bucket = process.env.S3_BUCKET_NAME || process.env.BUCKET_NAME || 'shareable-markdown-docs';
+
+    const region = process.env.S3_REGION || process.env.AWS_REGION || 'us-east-1';
 
     const clientConfig: Record<string, unknown> = {
-      region: process.env.AWS_REGION || 'us-east-1',
-      credentials: {
-        accessKeyId: process.env.AWS_ACCESS_KEY_ID || '',
-        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || '',
-      },
+      region,
     };
+
+    const accessKeyId =
+      process.env.S3_ACCESS_KEY_ID ||
+      process.env.APP_AWS_ACCESS_KEY_ID ||
+      process.env.AWS_ACCESS_KEY_ID;
+    const secretAccessKey =
+      process.env.S3_SECRET_ACCESS_KEY ||
+      process.env.APP_AWS_SECRET_ACCESS_KEY ||
+      process.env.AWS_SECRET_ACCESS_KEY;
+
+    // If static keys provided, pass them explicitly; otherwise @aws-sdk/client-s3 resolves
+    // credentials automatically via default provider chain (IAM Roles, ECS Task Roles, etc.)
+    if (accessKeyId && secretAccessKey) {
+      clientConfig.credentials = {
+        accessKeyId,
+        secretAccessKey,
+      };
+    }
 
     if (process.env.S3_ENDPOINT) {
       clientConfig.endpoint = process.env.S3_ENDPOINT;
@@ -195,9 +237,10 @@ export function getStorageInfo() {
   const isReal = isRealS3Configured();
   return {
     type: isReal ? ('AWS S3' as const) : ('Local S3 (Emulated)' as const),
-    bucket: process.env.S3_BUCKET_NAME || 'shareable-markdown-docs',
-    region: process.env.AWS_REGION || 'us-east-1',
+    bucket: process.env.S3_BUCKET_NAME || process.env.BUCKET_NAME || 'shareable-markdown-docs',
+    region: process.env.S3_REGION || process.env.AWS_REGION || 'us-east-1',
     endpoint: process.env.S3_ENDPOINT || null,
     isConfigured: isReal,
   };
 }
+

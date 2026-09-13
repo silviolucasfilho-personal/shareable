@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useRef } from 'react';
-import { X, UploadCloud, FileText, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
+import { X, UploadCloud, FileText, FileCode, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
 
 interface UploadModalProps {
   isOpen: boolean;
@@ -37,10 +37,10 @@ export default function UploadModal({ isOpen, onClose, onUploadSuccess }: Upload
 
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       const files = Array.from(e.dataTransfer.files).filter((file) =>
-        file.name.match(/\.(md|markdown|txt)$/i)
+        file.name.match(/\.(md|markdown|txt|html|htm)$/i)
       );
       if (files.length === 0) {
-        setError('Please select valid Markdown (.md, .markdown) or text files.');
+        setError('Please select valid Markdown (.md, .markdown), text (.txt), or HTML (.html, .htm) files.');
         return;
       }
       setSelectedFiles((prev) => [...prev, ...files]);
@@ -50,7 +50,13 @@ export default function UploadModal({ isOpen, onClose, onUploadSuccess }: Upload
 
   const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
-      const files = Array.from(e.target.files);
+      const files = Array.from(e.target.files).filter((file) =>
+        file.name.match(/\.(md|markdown|txt|html|htm)$/i)
+      );
+      if (files.length === 0) {
+        setError('Please select valid Markdown (.md, .markdown), text (.txt), or HTML (.html, .htm) files.');
+        return;
+      }
       setSelectedFiles((prev) => [...prev, ...files]);
       setError(null);
     }
@@ -104,10 +110,10 @@ export default function UploadModal({ isOpen, onClose, onUploadSuccess }: Upload
         <div className="flex items-center justify-between pb-3 border-b border-neutral-100 dark:border-neutral-800">
           <div>
             <h3 className="text-lg font-semibold text-neutral-900 dark:text-neutral-100">
-              Import Markdown Documents
+              Import Documents
             </h3>
             <p className="text-xs text-neutral-500 mt-0.5">
-              Upload .md or .markdown files into your repository
+              Upload Markdown (.md) or HTML (.html) files into your repository
             </p>
           </div>
           <button
@@ -135,7 +141,7 @@ export default function UploadModal({ isOpen, onClose, onUploadSuccess }: Upload
             ref={fileInputRef}
             type="file"
             multiple
-            accept=".md,.markdown,.txt"
+            accept=".md,.markdown,.txt,.html,.htm"
             onChange={handleFileInputChange}
             className="hidden"
           />
@@ -146,7 +152,7 @@ export default function UploadModal({ isOpen, onClose, onUploadSuccess }: Upload
             <div className="text-sm font-medium text-neutral-800 dark:text-neutral-200">
               Click to browse or drag and drop files here
             </div>
-            <p className="text-xs text-neutral-500">Supports .md, .markdown, .txt</p>
+            <p className="text-xs text-neutral-500">Supports .md, .markdown, .txt, .html, .htm</p>
           </div>
         </div>
 
@@ -192,7 +198,11 @@ export default function UploadModal({ isOpen, onClose, onUploadSuccess }: Upload
                 className="flex items-center justify-between p-2 rounded-lg bg-neutral-50 dark:bg-neutral-800/60 border border-neutral-200 dark:border-neutral-800 text-xs"
               >
                 <div className="flex items-center gap-2 truncate">
-                  <FileText className="w-4 h-4 text-blue-500 shrink-0" />
+                  {file.name.match(/\.(html|htm)$/i) ? (
+                    <FileCode className="w-4 h-4 text-amber-500 shrink-0" />
+                  ) : (
+                    <FileText className="w-4 h-4 text-blue-500 shrink-0" />
+                  )}
                   <span className="truncate font-medium text-neutral-800 dark:text-neutral-200">
                     {file.name}
                   </span>
