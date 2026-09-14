@@ -5,7 +5,8 @@ import { useRouter } from 'next/navigation';
 import Navbar from '@/components/Navbar';
 import MarkdownEditor from '@/components/MarkdownEditor';
 import { Document } from '@/lib/types';
-import { Sparkles, FileText, Code2, Users } from 'lucide-react';
+import { useAuth } from '@/lib/auth-context';
+import { Sparkles, FileText, Code2, Users, Lock } from 'lucide-react';
 
 const TEMPLATES = [
   {
@@ -99,6 +100,7 @@ flowchart LR
 
 export default function NewDocumentPage() {
   const router = useRouter();
+  const { user, loading, signInWithGoogle } = useAuth();
   const [selectedTemplate, setSelectedTemplate] = useState<number | null>(null);
   const [initialDoc, setInitialDoc] = useState<Document>({
     id: '',
@@ -152,6 +154,45 @@ export default function NewDocumentPage() {
       return null;
     }
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-neutral-50/50 dark:bg-neutral-950 flex flex-col">
+        <Navbar />
+        <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
+          <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mb-4" />
+          <p className="text-sm text-neutral-500">Checking session...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-neutral-50/50 dark:bg-neutral-950 flex flex-col">
+        <Navbar />
+        <div className="flex-1 flex flex-col items-center justify-center p-6 text-center max-w-md mx-auto w-full px-4">
+          <div className="p-8 sm:p-10 rounded-3xl bg-white dark:bg-neutral-900 border border-neutral-200/80 dark:border-neutral-800/80 shadow-xl space-y-6 w-full text-center">
+            <div className="w-14 h-14 mx-auto rounded-2xl bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-900 flex items-center justify-center text-amber-600 dark:text-amber-400">
+              <Lock className="w-6 h-6" />
+            </div>
+            <div className="space-y-1">
+              <h2 className="text-xl font-bold text-neutral-900 dark:text-white">Authentication Required</h2>
+              <p className="text-xs text-neutral-500 dark:text-neutral-400">
+                You must sign in with your Google account to create documents.
+              </p>
+            </div>
+            <button
+              onClick={() => signInWithGoogle()}
+              className="w-full flex items-center justify-center gap-2.5 px-4 py-3 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-medium text-sm transition-colors shadow-md cursor-pointer"
+            >
+              <span>Sign in with Google</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-neutral-50/50 dark:bg-neutral-950 flex flex-col">

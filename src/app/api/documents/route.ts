@@ -14,6 +14,12 @@ export async function GET(request: NextRequest) {
     const scope = (searchParams.get('scope') as DocumentFilter['scope']) || 'all';
 
     const caller = await getAuthenticatedUser(request);
+    if (!caller) {
+      return NextResponse.json(
+        { success: false, error: 'Authentication required. Please sign in.' },
+        { status: 401 }
+      );
+    }
 
     const filter: DocumentFilter = {
       query,
@@ -22,8 +28,8 @@ export async function GET(request: NextRequest) {
       isPublic: isPublicParam !== null ? isPublicParam === 'true' : undefined,
       sortBy,
       scope,
-      userEmail: caller?.email,
-      userId: caller?.userId,
+      userEmail: caller.email,
+      userId: caller.userId,
     };
 
     const [documents, stats, tags, folders] = await Promise.all([
@@ -53,6 +59,12 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const caller = await getAuthenticatedUser(request);
+    if (!caller) {
+      return NextResponse.json(
+        { success: false, error: 'Authentication required. Please sign in.' },
+        { status: 401 }
+      );
+    }
     const body = await request.json();
     const { title, content, tags, folder, isPublic } = body;
 

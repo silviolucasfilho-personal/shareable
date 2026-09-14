@@ -39,9 +39,34 @@ const isCognitoConfigured = Boolean(
   outputs.auth.user_pool_id.length > 0
 );
 
+function getAmplifyClientConfig() {
+  if (!isCognitoConfigured) return outputs;
+  if (typeof window === 'undefined' || !outputs?.auth?.oauth) return outputs;
+
+  try {
+    const currentOrigin = window.location.origin.replace(/\/$/, '') + '/';
+    const signIns = outputs.auth.oauth.redirect_sign_in_uri || [];
+    const signOuts = outputs.auth.oauth.redirect_sign_out_uri || [];
+
+    return {
+      ...outputs,
+      auth: {
+        ...outputs.auth,
+        oauth: {
+          ...outputs.auth.oauth,
+          redirect_sign_in_uri: Array.from(new Set([currentOrigin, ...signIns])),
+          redirect_sign_out_uri: Array.from(new Set([currentOrigin, ...signOuts])),
+        },
+      },
+    };
+  } catch {
+    return outputs;
+  }
+}
+
 if (isCognitoConfigured) {
   try {
-    Amplify.configure(outputs, { ssr: true });
+    Amplify.configure(getAmplifyClientConfig(), { ssr: true });
   } catch (err) {
     console.warn('Amplify configuration error:', err);
   }
@@ -126,9 +151,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const handleSignInWithGoogle = async () => {
     if (isCognitoConfigured) {
       try {
+        if (typeof window !== 'undefined') {
+          Amplify.configure(getAmplifyClientConfig(), { ssr: true });
+        }
         await signInWithRedirect({ provider: 'Google' });
       } catch (err) {
         console.error('Failed to start Google sign in with Amplify:', err);
+        throw err;
       }
     } else {
       // Prompt user with helpful instructions if Cognito is not connected yet
