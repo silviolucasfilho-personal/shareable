@@ -705,7 +705,7 @@ export default function RepositoryDashboard() {
                         className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-medium rounded-xl border border-neutral-200 dark:border-neutral-700 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors cursor-pointer"
                       >
                         <Upload className="w-3.5 h-3.5 text-neutral-500" />
-                        <span>Import .md</span>
+                        <span>Import</span>
                       </button>
                       <Link
                         href="/doc/new"

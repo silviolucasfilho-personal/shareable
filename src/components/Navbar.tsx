@@ -60,7 +60,7 @@ export default function Navbar({ onOpenUpload, documentCount }: NavbarProps) {
               title="Import markdown documents"
             >
               <Upload className="w-4 h-4 text-neutral-500" />
-              <span className="hidden sm:inline">Import .md</span>
+              <span className="hidden sm:inline">Import</span>
             </button>
           )}
 
@@ -170,4 +170,3 @@ export default function Navbar({ onOpenUpload, documentCount }: NavbarProps) {
     </header>
   );
 }
-

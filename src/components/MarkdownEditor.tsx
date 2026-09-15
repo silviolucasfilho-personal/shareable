@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useSyncExternalStore } from 'react';
 import {
   Bold,
   Italic,
@@ -50,6 +50,21 @@ interface MarkdownEditorProps {
   readOnly?: boolean;
 }
 
+type ViewMode = 'split' | 'edit' | 'preview';
+
+function subscribeToViewportChange(onStoreChange: () => void) {
+  window.addEventListener('resize', onStoreChange);
+  return () => window.removeEventListener('resize', onStoreChange);
+}
+
+function isMobileViewport() {
+  return window.innerWidth < 768;
+}
+
+function isMobileServerSnapshot() {
+  return false;
+}
+
 export default function MarkdownEditor({
   initialDocument,
   onSave,
@@ -63,20 +78,21 @@ export default function MarkdownEditor({
   const [tagInput, setTagInput] = useState('');
   const [isPublic, setIsPublic] = useState(initialDocument?.isPublic ?? true);
 
-  const [viewMode, setViewMode] = useState<'split' | 'edit' | 'preview'>(readOnly ? 'preview' : 'split');
+  const isMobile = useSyncExternalStore(
+    subscribeToViewportChange,
+    isMobileViewport,
+    isMobileServerSnapshot
+  );
+  const [selectedViewMode, setSelectedViewMode] = useState<ViewMode | null>(null);
+  const viewMode = selectedViewMode ?? (
+    readOnly || initialDocument ? 'preview' : isMobile ? 'edit' : 'split'
+  );
   const [isSaving, setIsSaving] = useState(false);
   const [isSaved, setIsSaved] = useState(true);
   const [copied, setCopied] = useState(false);
   const [savedDoc, setSavedDoc] = useState<Document | undefined>(initialDocument);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-
-  // Set default view mode on mobile screens
-  useEffect(() => {
-    if (window.innerWidth < 768 && !readOnly) {
-      setViewMode('edit');
-    }
-  }, [readOnly]);
 
   const handleSave = useCallback(async () => {
     if (readOnly || isSaving) return;
@@ -211,7 +227,7 @@ export default function MarkdownEditor({
         {/* View mode switcher */}
         <div className="flex items-center p-1 bg-neutral-100 dark:bg-neutral-800 rounded-xl">
           <button
-            onClick={() => setViewMode('edit')}
+            onClick={() => setSelectedViewMode('edit')}
             className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
               viewMode === 'edit'
                 ? 'bg-white dark:bg-neutral-700 text-neutral-900 dark:text-white shadow-xs'
@@ -222,7 +238,7 @@ export default function MarkdownEditor({
             <span>Write</span>
           </button>
           <button
-            onClick={() => setViewMode('split')}
+            onClick={() => setSelectedViewMode('split')}
             className={`hidden md:flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
               viewMode === 'split'
                 ? 'bg-white dark:bg-neutral-700 text-neutral-900 dark:text-white shadow-xs'
@@ -233,7 +249,7 @@ export default function MarkdownEditor({
             <span>Split View</span>
           </button>
           <button
-            onClick={() => setViewMode('preview')}
+            onClick={() => setSelectedViewMode('preview')}
             className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
               viewMode === 'preview'
                 ? 'bg-white dark:bg-neutral-700 text-neutral-900 dark:text-white shadow-xs'
