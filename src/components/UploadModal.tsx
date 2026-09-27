@@ -1,15 +1,17 @@
 'use client';
 
 import React, { useState, useRef } from 'react';
-import { X, UploadCloud, FileText, FileCode, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
+import { X, UploadCloud, FileText, FileCode, CheckCircle2, AlertCircle, Loader2, ShieldCheck, AlertTriangle } from 'lucide-react';
+import { UserQuota } from '@/lib/types';
 
 interface UploadModalProps {
   isOpen: boolean;
   onClose: () => void;
   onUploadSuccess: () => void;
+  userQuota?: UserQuota | null;
 }
 
-export default function UploadModal({ isOpen, onClose, onUploadSuccess }: UploadModalProps) {
+export default function UploadModal({ isOpen, onClose, onUploadSuccess, userQuota }: UploadModalProps) {
   const [dragActive, setDragActive] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [folderName, setFolderName] = useState('');
@@ -124,6 +126,34 @@ export default function UploadModal({ isOpen, onClose, onUploadSuccess }: Upload
           </button>
         </div>
 
+        {/* Quota Info Banner */}
+        {userQuota && (
+          <div className="flex items-center justify-between px-3 py-2 rounded-xl text-xs bg-neutral-50 dark:bg-neutral-800/60 border border-neutral-200/80 dark:border-neutral-800">
+            <span className="text-neutral-600 dark:text-neutral-400 font-medium">Account Role</span>
+            {userQuota.role === 'ADMIN' ? (
+              <span className="font-semibold text-purple-600 dark:text-purple-400">
+                Admin: Unlimited Documents
+              </span>
+            ) : (
+              <span className={`font-semibold ${userQuota.remaining === 0 ? 'text-amber-600 dark:text-amber-400' : 'text-neutral-700 dark:text-neutral-300'}`}>
+                Free User: {userQuota.currentCount}/3 used ({userQuota.remaining} remaining)
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* Exceeds Free User Quota Warning */}
+        {userQuota?.role === 'FREE_USER' && selectedFiles.length > (userQuota.remaining ?? 0) && (
+          <div className="flex items-center gap-2 p-3 bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800/60 rounded-xl text-xs">
+            <AlertTriangle className="w-4 h-4 shrink-0 text-amber-600 dark:text-amber-400" />
+            <span>
+              {userQuota.remaining === 0
+                ? 'Free user limit reached (3/3 documents). Delete existing documents before importing new ones.'
+                : `You selected ${selectedFiles.length} file(s), but your Free plan only has ${userQuota.remaining} upload(s) remaining.`}
+            </span>
+          </div>
+        )}
+
         {/* Drop Zone */}
         <div
           onDragEnter={handleDrag}
@@ -232,7 +262,11 @@ export default function UploadModal({ isOpen, onClose, onUploadSuccess }: Upload
           </button>
           <button
             onClick={handleUpload}
-            disabled={selectedFiles.length === 0 || uploading}
+            disabled={
+              selectedFiles.length === 0 ||
+              uploading ||
+              (userQuota?.role === 'FREE_USER' && selectedFiles.length > (userQuota.remaining ?? 0))
+            }
             className="flex items-center gap-2 px-5 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl text-sm font-medium transition-colors shadow-sm cursor-pointer"
           >
             {uploading ? (

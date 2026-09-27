@@ -5,6 +5,8 @@ import { Amplify } from 'aws-amplify';
 import { getCurrentUser, fetchUserAttributes, signInWithRedirect, signOut as amplifySignOut } from 'aws-amplify/auth';
 import { Hub } from 'aws-amplify/utils';
 import outputs from '../../amplify_outputs.json';
+import { UserRole } from './types';
+import { getUserRole } from './roles';
 
 export interface AuthUserProfile {
   userId: string;
@@ -12,6 +14,7 @@ export interface AuthUserProfile {
   name?: string;
   picture?: string;
   isDevUser?: boolean;
+  role: UserRole;
 }
 
 interface AuthContextType {
@@ -84,12 +87,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const currentUser = await getCurrentUser();
       const attributes = await fetchUserAttributes();
+      const email = attributes.email?.toLowerCase().trim() || '';
       setUser({
         userId: currentUser.userId,
-        email: attributes.email?.toLowerCase().trim() || '',
+        email,
         name: attributes.name || attributes.email?.split('@')[0] || 'User',
         picture: attributes.picture,
         isDevUser: false,
+        role: getUserRole(email),
       });
       return true;
     } catch {
@@ -114,8 +119,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const stored = localStorage.getItem(DEV_STORAGE_KEY);
         if (stored) {
           const parsed = JSON.parse(stored);
-          setUser(parsed);
-          document.cookie = `dev_user_email=${encodeURIComponent(parsed.email)}; path=/; max-age=604800`;
+          const email = (parsed.email || '').toLowerCase().trim();
+          const userWithRole: AuthUserProfile = {
+            ...parsed,
+            email,
+            role: getUserRole(email),
+          };
+          setUser(userWithRole);
+          document.cookie = `dev_user_email=${encodeURIComponent(email)}; path=/; max-age=604800`;
           setLoading(false);
           return;
         }
@@ -178,6 +189,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       email: cleanEmail,
       name: name || cleanEmail.split('@')[0],
       isDevUser: true,
+      role: getUserRole(cleanEmail),
     };
     setUser(devUser);
     if (typeof window !== 'undefined') {

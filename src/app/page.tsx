@@ -6,7 +6,7 @@ import Navbar from '@/components/Navbar';
 import DocumentCard from '@/components/DocumentCard';
 import ShareModal from '@/components/ShareModal';
 import UploadModal from '@/components/UploadModal';
-import { Document, DocumentSummary } from '@/lib/types';
+import { Document, DocumentSummary, UserQuota } from '@/lib/types';
 import { useAuth } from '@/lib/auth-context';
 import {
   Search,
@@ -27,6 +27,7 @@ import {
   BookOpen,
   UserCheck,
   Users,
+  AlertTriangle,
 } from 'lucide-react';
 
 export default function RepositoryDashboard() {
@@ -59,6 +60,7 @@ export default function RepositoryDashboard() {
   const [sharingDoc, setSharingDoc] = useState<Document | null>(null);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+  const [userQuota, setUserQuota] = useState<UserQuota | null>(null);
   const [loading, setLoading] = useState(true);
   const [isSigningIn, setIsSigningIn] = useState(false);
   const [signInError, setSignInError] = useState<string | null>(null);
@@ -97,6 +99,7 @@ export default function RepositoryDashboard() {
         if (data.stats) setStats(data.stats);
         if (data.tags) setTags(data.tags);
         if (data.folders) setFolders(data.folders);
+        if (data.userQuota) setUserQuota(data.userQuota);
       }
     } catch (err) {
       console.error('Failed to load documents:', err);
@@ -533,6 +536,28 @@ export default function RepositoryDashboard() {
 
           {/* Main Section */}
           <div className="lg:col-span-3 space-y-6">
+            {/* Free User Quota Limit Banner */}
+            {userQuota && userQuota.role === 'FREE_USER' && userQuota.currentCount >= 3 && (
+              <div className="p-4 rounded-2xl border border-amber-200 dark:border-amber-800/80 bg-amber-50/70 dark:bg-amber-950/30 flex flex-wrap items-center justify-between gap-3 animate-in fade-in duration-150">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-xl bg-amber-100 dark:bg-amber-900/50 text-amber-600 dark:text-amber-400 shrink-0">
+                    <AlertTriangle className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-semibold text-amber-900 dark:text-amber-200">
+                      Free Plan Document Limit Reached ({userQuota.currentCount}/3)
+                    </h4>
+                    <p className="text-xs text-amber-700 dark:text-amber-300 mt-0.5">
+                      Free users can keep up to 3 documents. Delete an existing document to create or import new ones, or contact the admin.
+                    </p>
+                  </div>
+                </div>
+                <span className="text-[11px] font-semibold text-amber-800 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/60 px-3 py-1.5 rounded-xl border border-amber-300/60 dark:border-amber-700/60">
+                  Quota: 3/3 Used
+                </span>
+              </div>
+            )}
+
             {/* Search & Filter Toolbar */}
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white dark:bg-neutral-900 p-3 rounded-2xl border border-neutral-200/80 dark:border-neutral-800/80">
               {/* Search input with shortcut badge */}
@@ -740,6 +765,7 @@ export default function RepositoryDashboard() {
         onUploadSuccess={() => {
           fetchDocuments();
         }}
+        userQuota={userQuota}
       />
     </div>
   );

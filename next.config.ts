@@ -2,6 +2,8 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   env: {
+    ADMIN_EMAIL: process.env.ADMIN_EMAIL || process.env.NEXT_PUBLIC_ADMIN_EMAIL || "silviolucasfilho@gmail.com",
+    NEXT_PUBLIC_ADMIN_EMAIL: process.env.NEXT_PUBLIC_ADMIN_EMAIL || process.env.ADMIN_EMAIL || "silviolucasfilho@gmail.com",
     ...(process.env.S3_BUCKET_NAME ? { S3_BUCKET_NAME: process.env.S3_BUCKET_NAME } : {}),
     ...(process.env.BUCKET_NAME ? { BUCKET_NAME: process.env.BUCKET_NAME } : {}),
     ...(process.env.S3_REGION ? { S3_REGION: process.env.S3_REGION } : {}),

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDocuments, createDocument, getRepositoryStats, getAllTags, getAllFolders } from '@/lib/storage';
+import { getDocuments, createDocument, getRepositoryStats, getAllTags, getAllFolders, canUserCreateDocument } from '@/lib/storage';
 import { DocumentFilter } from '@/lib/types';
 import { getAuthenticatedUser } from '@/lib/amplify-server-utils';
 
@@ -32,11 +32,12 @@ export async function GET(request: NextRequest) {
       userId: caller.userId,
     };
 
-    const [documents, stats, tags, folders] = await Promise.all([
+    const [documents, stats, tags, folders, userQuota] = await Promise.all([
       getDocuments(filter),
       getRepositoryStats(),
       getAllTags(),
       getAllFolders(),
+      canUserCreateDocument(caller.email, caller.userId, 0),
     ]);
 
     return NextResponse.json({
@@ -46,6 +47,13 @@ export async function GET(request: NextRequest) {
       tags,
       folders,
       currentUser: caller,
+      userQuota: {
+        role: userQuota.role,
+        currentCount: userQuota.currentCount,
+        maxDocuments: userQuota.maxDocuments,
+        canCreate: userQuota.allowed,
+        remaining: userQuota.remaining,
+      },
     });
   } catch (error) {
     console.error('Failed to fetch documents from S3:', error);
@@ -65,6 +73,22 @@ export async function POST(request: NextRequest) {
         { status: 401 }
       );
     }
+
+    // Role-based quota enforcement: Free users can keep up to 3 documents
+    const quotaCheck = await canUserCreateDocument(caller.email, caller.userId, 1);
+    if (!quotaCheck.allowed) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: quotaCheck.error || 'Free user document limit reached (maximum 3 documents).',
+          role: quotaCheck.role,
+          currentCount: quotaCheck.currentCount,
+          maxDocuments: quotaCheck.maxDocuments,
+        },
+        { status: 403 }
+      );
+    }
+
     const body = await request.json();
     const { title, content, tags, folder, isPublic } = body;
 
@@ -87,11 +111,13 @@ export async function POST(request: NextRequest) {
     });
 
     return NextResponse.json({ success: true, document: doc }, { status: 201 });
-  } catch (error) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Failed to create document in S3 storage';
     console.error('Failed to create document in S3:', error);
+    const isQuotaError = message.toLowerCase().includes('free users can keep up to');
     return NextResponse.json(
-      { success: false, error: 'Failed to create document in S3 storage' },
-      { status: 500 }
+      { success: false, error: message },
+      { status: isQuotaError ? 403 : 500 }
     );
   }
 }

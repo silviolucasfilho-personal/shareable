@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import matter from 'gray-matter';
 import TurndownService from 'turndown';
-import { createDocument } from '@/lib/storage';
+import { createDocument, canUserCreateDocument } from '@/lib/storage';
 import { Document } from '@/lib/types';
+import { getAuthenticatedUser } from '@/lib/amplify-server-utils';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -414,6 +415,24 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const caller = await getAuthenticatedUser(request);
+
+    // Enforce role-based document limit (Free users can keep up to 3 documents)
+    const quotaCheck = await canUserCreateDocument(caller?.email, caller?.userId, toCreate.length);
+    if (!quotaCheck.allowed) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: quotaCheck.error || 'Upload would exceed the document limit for free users.',
+          role: quotaCheck.role,
+          currentCount: quotaCheck.currentCount,
+          maxDocuments: quotaCheck.maxDocuments,
+          remaining: quotaCheck.remaining,
+        },
+        { status: 403, headers: corsHeaders }
+      );
+    }
+
     // Persist all documents to S3 storage
     const createdDocs: Document[] = [];
     for (const docInput of toCreate) {
@@ -423,6 +442,8 @@ export async function POST(request: NextRequest) {
         tags: docInput.tags,
         folder: docInput.folder,
         isPublic: docInput.isPublic,
+        ownerId: caller?.userId,
+        ownerEmail: caller?.email,
       });
       createdDocs.push(doc);
     }
@@ -443,11 +464,13 @@ export async function POST(request: NextRequest) {
         headers: corsHeaders,
       }
     );
-  } catch (error) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Failed to upload and store document in S3 storage';
     console.error('Document upload error:', error);
+    const isQuota = message.toLowerCase().includes('free users can keep up to');
     return NextResponse.json(
-      { success: false, error: 'Failed to upload and store document in S3 storage' },
-      { status: 500, headers: corsHeaders }
+      { success: false, error: message },
+      { status: isQuota ? 403 : 500, headers: corsHeaders }
     );
   }
 }

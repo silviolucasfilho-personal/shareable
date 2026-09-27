@@ -5,6 +5,16 @@ export interface DocumentAuthor {
   image?: string;
 }
 
+export type UserRole = 'ADMIN' | 'FREE_USER';
+
+export interface UserQuota {
+  role: UserRole;
+  currentCount: number;
+  maxDocuments: number | null; // null represents unlimited for ADMIN
+  canCreate: boolean;
+  remaining: number | null; // null for unlimited
+}
+
 export type CollaboratorRole = 'viewer' | 'editor';
 
 export interface Collaborator {

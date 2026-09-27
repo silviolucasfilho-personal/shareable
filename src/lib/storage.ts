@@ -1,6 +1,7 @@
-import { Document, DocumentSummary, CreateDocumentInput, UpdateDocumentInput, DocumentFilter } from './types';
+import { Document, DocumentSummary, CreateDocumentInput, UpdateDocumentInput, DocumentFilter, UserRole, UserQuota } from './types';
 import { generateSlug, generateShareToken, extractExcerpt, calculateReadingTime, countWords } from './utils';
 import { getS3Engine, getStorageInfo } from './s3-client';
+import { getUserRole, calculateUserQuota, FREE_USER_DOC_LIMIT } from './roles';
 
 const INDEX_KEY = 'index/documents-index.json';
 
@@ -412,8 +413,78 @@ export async function getDocumentByShareToken(token: string): Promise<Document |
   }
 }
 
+export async function getUserDocumentCount(userEmail?: string, userId?: string): Promise<number> {
+  const index = await getIndex();
+  if (!userEmail && !userId) {
+    return 0;
+  }
+  const normalizedEmail = userEmail?.toLowerCase().trim();
+  return index.filter((d) => {
+    if (userId && d.ownerId && d.ownerId === userId) return true;
+    if (normalizedEmail && d.ownerEmail && d.ownerEmail.toLowerCase() === normalizedEmail) return true;
+    return false;
+  }).length;
+}
+
+export async function canUserCreateDocument(
+  userEmail?: string,
+  userId?: string,
+  countToAdd: number = 1
+): Promise<{
+  allowed: boolean;
+  role: UserRole;
+  currentCount: number;
+  maxDocuments: number | null;
+  remaining: number | null;
+  error?: string;
+}> {
+  const role = getUserRole(userEmail);
+  const currentCount = await getUserDocumentCount(userEmail, userId);
+
+  if (role === 'ADMIN') {
+    return {
+      allowed: true,
+      role: 'ADMIN',
+      currentCount,
+      maxDocuments: null,
+      remaining: null,
+    };
+  }
+
+  const maxDocuments = FREE_USER_DOC_LIMIT;
+  const remaining = Math.max(0, maxDocuments - currentCount);
+
+  if (currentCount + countToAdd > maxDocuments) {
+    return {
+      allowed: false,
+      role: 'FREE_USER',
+      currentCount,
+      maxDocuments,
+      remaining,
+      error: `Free users can keep up to ${maxDocuments} documents. You currently have ${currentCount} document${currentCount === 1 ? '' : 's'}. Delete an existing document to add more, or upgrade to Admin.`,
+    };
+  }
+
+  return {
+    allowed: true,
+    role: 'FREE_USER',
+    currentCount,
+    maxDocuments,
+    remaining: Math.max(0, remaining - countToAdd),
+  };
+}
+
 export async function createDocument(input: CreateDocumentInput): Promise<Document> {
   await ensureStorageInitialized();
+
+  // Enforce document limits based on user role (ADMIN vs FREE_USER)
+  if (input.ownerEmail || input.ownerId) {
+    const quotaCheck = await canUserCreateDocument(input.ownerEmail, input.ownerId, 1);
+    if (!quotaCheck.allowed) {
+      throw new Error(quotaCheck.error || 'Document limit exceeded for Free users');
+    }
+  }
+
   const engine = getS3Engine();
 
   const id = crypto.randomUUID();

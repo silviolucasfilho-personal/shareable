@@ -1,12 +1,13 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import Navbar from '@/components/Navbar';
 import MarkdownEditor from '@/components/MarkdownEditor';
 import { Document } from '@/lib/types';
 import { useAuth } from '@/lib/auth-context';
-import { Sparkles, FileText, Code2, Users, Lock } from 'lucide-react';
+import { Sparkles, FileText, Code2, Users, Lock, AlertTriangle, ArrowLeft } from 'lucide-react';
 
 const TEMPLATES = [
   {
@@ -102,6 +103,8 @@ export default function NewDocumentPage() {
   const router = useRouter();
   const { user, loading, signInWithGoogle } = useAuth();
   const [selectedTemplate, setSelectedTemplate] = useState<number | null>(null);
+  const [quotaReached, setQuotaReached] = useState(false);
+  const [checkingQuota, setCheckingQuota] = useState(true);
   const [initialDoc, setInitialDoc] = useState<Document>({
     id: '',
     slug: '',
@@ -115,6 +118,29 @@ export default function NewDocumentPage() {
     createdAt: '',
     updatedAt: '',
   });
+
+  useEffect(() => {
+    if (!user) {
+      setCheckingQuota(false);
+      return;
+    }
+    if (user.role === 'ADMIN') {
+      setCheckingQuota(false);
+      return;
+    }
+    // Check quota for FREE_USER
+    fetch('/api/documents?scope=mine')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.userQuota && !data.userQuota.canCreate) {
+          setQuotaReached(true);
+        } else if (data.documents && data.documents.length >= 3) {
+          setQuotaReached(true);
+        }
+      })
+      .catch((err) => console.error('Failed to check user quota:', err))
+      .finally(() => setCheckingQuota(false));
+  }, [user]);
 
   const handleSelectTemplate = (index: number) => {
     const t = TEMPLATES[index];
@@ -148,6 +174,7 @@ export default function NewDocumentPage() {
         router.push(`/doc/${json.document.id}`);
         return json.document;
       }
+      alert(json.error || 'Failed to create document');
       return null;
     } catch (err) {
       console.error('Failed to create document:', err);
@@ -155,13 +182,13 @@ export default function NewDocumentPage() {
     }
   };
 
-  if (loading) {
+  if (loading || checkingQuota) {
     return (
       <div className="min-h-screen bg-neutral-50/50 dark:bg-neutral-950 flex flex-col">
         <Navbar />
         <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
           <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mb-4" />
-          <p className="text-sm text-neutral-500">Checking session...</p>
+          <p className="text-sm text-neutral-500">Checking session & quota...</p>
         </div>
       </div>
     );
@@ -188,6 +215,37 @@ export default function NewDocumentPage() {
             >
               <span>Sign in with Google</span>
             </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (quotaReached) {
+    return (
+      <div className="min-h-screen bg-neutral-50/50 dark:bg-neutral-950 flex flex-col">
+        <Navbar />
+        <div className="flex-1 flex flex-col items-center justify-center p-6 text-center max-w-md mx-auto w-full px-4">
+          <div className="p-8 sm:p-10 rounded-3xl bg-white dark:bg-neutral-900 border border-amber-200/80 dark:border-amber-800/80 shadow-xl space-y-6 w-full text-center">
+            <div className="w-14 h-14 mx-auto rounded-2xl bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-900 flex items-center justify-center text-amber-600 dark:text-amber-400">
+              <AlertTriangle className="w-6 h-6" />
+            </div>
+            <div className="space-y-2">
+              <h2 className="text-xl font-bold text-neutral-900 dark:text-white">Document Limit Reached</h2>
+              <p className="text-xs text-neutral-500 dark:text-neutral-400 leading-relaxed">
+                Free users can keep up to <strong>3 documents</strong> in their repository. You currently have 3 documents. Please delete an existing document to create a new one, or contact the administrator.
+              </p>
+              <div className="pt-2 text-[11px] text-neutral-400">
+                Admin: <code className="text-purple-600 dark:text-purple-400 font-medium">silviolucasfilho@gmail.com</code>
+              </div>
+            </div>
+            <Link
+              href="/"
+              className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-neutral-900 dark:bg-white hover:bg-neutral-800 dark:hover:bg-neutral-100 text-white dark:text-neutral-900 font-medium text-sm transition-colors shadow-md"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              <span>Return to Dashboard</span>
+            </Link>
           </div>
         </div>
       </div>

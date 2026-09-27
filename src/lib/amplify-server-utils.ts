@@ -4,6 +4,9 @@ import { NextRequest } from 'next/server';
 import { cookies } from 'next/headers';
 import outputs from '../../amplify_outputs.json';
 
+import { UserRole } from './types';
+import { getUserRole } from './roles';
+
 const isAmplifyConfigured = Boolean(
   outputs &&
   outputs.auth &&
@@ -19,6 +22,7 @@ export interface ServerUserIdentity {
   userId: string;
   email: string;
   name?: string;
+  role: UserRole;
 }
 
 /**
@@ -30,10 +34,12 @@ export async function getAuthenticatedUser(request?: NextRequest): Promise<Serve
   if (request) {
     const devUserHeader = request.headers.get('x-dev-user-email');
     if (devUserHeader) {
+      const email = devUserHeader.toLowerCase().trim();
       return {
-        userId: `dev-${devUserHeader}`,
-        email: devUserHeader.toLowerCase().trim(),
-        name: devUserHeader.split('@')[0],
+        userId: `dev-${email}`,
+        email,
+        name: email.split('@')[0],
+        role: getUserRole(email),
       };
     }
   }
@@ -43,10 +49,12 @@ export async function getAuthenticatedUser(request?: NextRequest): Promise<Serve
     const cookieStore = await cookies();
     const devCookie = cookieStore.get('dev_user_email');
     if (devCookie?.value) {
+      const email = devCookie.value.toLowerCase().trim();
       return {
-        userId: `dev-${devCookie.value}`,
-        email: devCookie.value.toLowerCase().trim(),
-        name: devCookie.value.split('@')[0],
+        userId: `dev-${email}`,
+        email,
+        name: email.split('@')[0],
+        role: getUserRole(email),
       };
     }
   } catch {
@@ -80,10 +88,13 @@ export async function getAuthenticatedUser(request?: NextRequest): Promise<Serve
       // Attributes fetch may be empty or failed
     }
 
+    const cleanEmail = email.toLowerCase().trim() || userSub;
+
     return {
       userId: userSub,
-      email: email.toLowerCase().trim() || userSub,
+      email: cleanEmail,
       name: name || undefined,
+      role: getUserRole(cleanEmail),
     };
   } catch {
     return null;

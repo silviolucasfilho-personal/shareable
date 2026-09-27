@@ -105,14 +105,36 @@ export default function Navbar({ onOpenUpload, documentCount }: NavbarProps) {
                   {dropdownOpen && (
                     <div className="absolute right-0 mt-2 w-56 rounded-2xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 shadow-xl py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
                       <div className="px-4 py-2 border-b border-neutral-100 dark:border-neutral-800">
-                        <p className="text-xs font-semibold text-neutral-900 dark:text-neutral-100 truncate">
-                          {user.name || 'Signed In'}
-                        </p>
-                        <p className="text-[11px] text-neutral-500 dark:text-neutral-400 truncate">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-xs font-semibold text-neutral-900 dark:text-neutral-100 truncate">
+                            {user.name || 'Signed In'}
+                          </p>
+                          {user.role === 'ADMIN' ? (
+                            <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 shrink-0">
+                              ADMIN
+                            </span>
+                          ) : (
+                            <span className="text-[9px] font-medium uppercase tracking-wider px-1.5 py-0.5 rounded bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 shrink-0">
+                              FREE USER
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-neutral-500 dark:text-neutral-400 truncate mt-0.5">
                           {user.email}
                         </p>
+                        <div className="mt-1.5 text-[10px] text-neutral-500 dark:text-neutral-400">
+                          {user.role === 'ADMIN' ? (
+                            <span className="text-purple-600 dark:text-purple-400 font-medium">
+                              ✓ Unlimited documents
+                            </span>
+                          ) : (
+                            <span className="text-neutral-600 dark:text-neutral-400">
+                              Quota: Up to 3 documents free
+                            </span>
+                          )}
+                        </div>
                         {user.isDevUser && (
-                          <span className="mt-1 inline-block text-[10px] px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 font-medium">
+                          <span className="mt-1.5 inline-block text-[10px] px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 font-medium">
                             Dev Mode User
                           </span>
                         )}
