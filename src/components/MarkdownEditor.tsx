@@ -34,7 +34,7 @@ import {
 import Link from 'next/link';
 import MarkdownRenderer from './MarkdownRenderer';
 import TableOfContents from './TableOfContents';
-import { countWords, calculateReadingTime } from '@/lib/utils';
+import { countWords, calculateReadingTime, formatExpiresIn } from '@/lib/utils';
 import { Document } from '@/lib/types';
 
 interface MarkdownEditorProps {
@@ -45,6 +45,8 @@ interface MarkdownEditorProps {
     tags: string[];
     folder: string;
     isPublic: boolean;
+    ttl?: string | null;
+    expiresAt?: string | null;
   }) => Promise<Document | null>;
   onOpenShare?: (doc: Document) => void;
   readOnly?: boolean;
@@ -77,6 +79,7 @@ export default function MarkdownEditor({
   const [tags, setTags] = useState<string[]>(initialDocument?.tags || []);
   const [tagInput, setTagInput] = useState('');
   const [isPublic, setIsPublic] = useState(initialDocument?.isPublic ?? true);
+  const [ttl, setTtl] = useState<string>(initialDocument ? 'keep' : 'never');
 
   const isMobile = useSyncExternalStore(
     subscribeToViewportChange,
@@ -104,6 +107,8 @@ export default function MarkdownEditor({
         tags,
         folder: folder.trim(),
         isPublic,
+        ttl: ttl === 'keep' ? undefined : ttl,
+        expiresAt: ttl === 'never' ? null : undefined,
       });
       if (doc) {
         setSavedDoc(doc);
@@ -114,7 +119,7 @@ export default function MarkdownEditor({
     } finally {
       setIsSaving(false);
     }
-  }, [readOnly, isSaving, onSave, title, content, tags, folder, isPublic]);
+  }, [readOnly, isSaving, onSave, title, content, tags, folder, isPublic, ttl]);
 
   // Keyboard shortcut for Cmd/Ctrl+S
   useEffect(() => {
@@ -363,6 +368,49 @@ export default function MarkdownEditor({
               />
             )}
           </div>
+
+          {/* TTL / Expiration selector */}
+          <div className="flex items-center gap-1.5 px-3 py-1.5 bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl">
+            <Clock className="w-3.5 h-3.5 text-neutral-400" />
+            <select
+              value={ttl}
+              disabled={readOnly}
+              onChange={(e) => setTtl(e.target.value)}
+              className="bg-transparent border-none outline-none text-neutral-700 dark:text-neutral-300 text-xs cursor-pointer disabled:opacity-80"
+              title="Time-to-live / Document Expiration"
+            >
+              {initialDocument ? (
+                <>
+                  <option value="keep" className="bg-white dark:bg-neutral-900">
+                    {initialDocument.expiresAt
+                      ? `TTL: ${formatExpiresIn(initialDocument.expiresAt)} left`
+                      : 'TTL: Never (Keep)'}
+                  </option>
+                  <option value="never" className="bg-white dark:bg-neutral-900">Never (No expiration)</option>
+                  <option value="1h" className="bg-white dark:bg-neutral-900">1 Hour</option>
+                  <option value="24h" className="bg-white dark:bg-neutral-900">24 Hours</option>
+                  <option value="7d" className="bg-white dark:bg-neutral-900">7 Days</option>
+                  <option value="30d" className="bg-white dark:bg-neutral-900">30 Days</option>
+                </>
+              ) : (
+                <>
+                  <option value="never" className="bg-white dark:bg-neutral-900">TTL: Never</option>
+                  <option value="1h" className="bg-white dark:bg-neutral-900">TTL: 1 Hour</option>
+                  <option value="24h" className="bg-white dark:bg-neutral-900">TTL: 24 Hours</option>
+                  <option value="7d" className="bg-white dark:bg-neutral-900">TTL: 7 Days</option>
+                  <option value="30d" className="bg-white dark:bg-neutral-900">TTL: 30 Days</option>
+                </>
+              )}
+            </select>
+          </div>
+
+          {/* Active expiration badge */}
+          {savedDoc?.expiresAt && (
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-[11px] font-medium bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800/60">
+              <Clock className="w-3 h-3 text-amber-500" />
+              <span>Expires in {formatExpiresIn(savedDoc.expiresAt)}</span>
+            </span>
+          )}
 
           {/* Metrics */}
           <div className="flex items-center gap-4 text-neutral-400 ml-auto text-[11px]">

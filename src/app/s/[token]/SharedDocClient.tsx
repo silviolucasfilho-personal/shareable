@@ -6,7 +6,7 @@ import { Document } from '@/lib/types';
 import MarkdownRenderer from '@/components/MarkdownRenderer';
 import TableOfContents from '@/components/TableOfContents';
 import ThemeToggle from '@/components/ThemeToggle';
-import { formatDate, calculateReadingTime, countWords } from '@/lib/utils';
+import { formatDate, calculateReadingTime, countWords, formatExpiresIn } from '@/lib/utils';
 import {
   Share2,
   Copy,
@@ -122,6 +122,12 @@ export default function SharedDocClient({ document: doc }: SharedDocClientProps)
                   <Globe className="w-3 h-3" />
                   <span>Public View</span>
                 </span>
+                {doc.expiresAt && (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 font-medium">
+                    <Clock className="w-3 h-3 text-amber-500" />
+                    <span>Expires in {formatExpiresIn(doc.expiresAt)}</span>
+                  </span>
+                )}
               </div>
 
               <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-neutral-900 dark:text-white">

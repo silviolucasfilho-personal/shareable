@@ -30,6 +30,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
         viewCount: doc.viewCount + 1,
         createdAt: doc.createdAt,
         updatedAt: doc.updatedAt,
+        expiresAt: doc.expiresAt,
       },
     });
   } catch (error) {

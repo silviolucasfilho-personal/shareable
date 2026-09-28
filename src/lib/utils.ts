@@ -123,3 +123,95 @@ export function extractHeadings(content: string): TOCItem[] {
   return items;
 }
 
+/**
+ * Calculates an ISO expiration timestamp given a TTL string or ISO date string.
+ * Supports presets ('1h', '24h', '1d', '7d', '30d', 'never'), duration units (s, m, h, d, w, mo, y),
+ * numeric seconds, unix epoch timestamps, or valid future ISO dates.
+ */
+export function calculateExpiresAt(ttl?: string | null): string | null {
+  if (!ttl) return null;
+  const trimmed = ttl.trim().toLowerCase();
+  if (['never', 'none', 'infinite', 'forever', '0', ''].includes(trimmed)) {
+    return null;
+  }
+
+  // 1. Check relative duration string (e.g. "1h", "24h", "7d", "30d", "15m", "60s")
+  const durationMatch = trimmed.match(/^(\d+)\s*(s|sec|secs|second|seconds|m|min|mins|minute|minutes|h|hr|hrs|hour|hours|d|day|days|w|week|weeks|mo|month|months|y|year|years)$/i);
+  if (durationMatch) {
+    const value = parseInt(durationMatch[1], 10);
+    const unit = durationMatch[2].toLowerCase();
+
+    let ms = 0;
+    if (unit.startsWith('s') && !unit.startsWith('sec')) ms = value * 1000;
+    else if (unit.startsWith('sec')) ms = value * 1000;
+    else if (unit.startsWith('m') && !unit.startsWith('mo')) ms = value * 60 * 1000;
+    else if (unit.startsWith('h')) ms = value * 60 * 60 * 1000;
+    else if (unit.startsWith('d')) ms = value * 24 * 60 * 60 * 1000;
+    else if (unit.startsWith('w')) ms = value * 7 * 24 * 60 * 60 * 1000;
+    else if (unit.startsWith('mo')) ms = value * 30 * 24 * 60 * 60 * 1000;
+    else if (unit.startsWith('y')) ms = value * 365 * 24 * 60 * 60 * 1000;
+
+    if (ms > 0) {
+      return new Date(Date.now() + ms).toISOString();
+    }
+  }
+
+  // 2. Check pure numeric input
+  const num = Number(trimmed);
+  if (!isNaN(num) && num > 0) {
+    // If epoch timestamp in milliseconds (> 1000000000000)
+    if (num > 1_000_000_000_000) {
+      return new Date(num).toISOString();
+    }
+    // If epoch timestamp in seconds (> 1000000000)
+    if (num > 1_000_000_000) {
+      return new Date(num * 1000).toISOString();
+    }
+    // Otherwise treat as TTL duration in seconds
+    return new Date(Date.now() + num * 1000).toISOString();
+  }
+
+  // 3. Check ISO 8601 or date string
+  const parsedDate = new Date(ttl);
+  if (!isNaN(parsedDate.getTime())) {
+    return parsedDate.toISOString();
+  }
+
+  return null;
+}
+
+/**
+ * Checks if a document has passed its expiration date.
+ */
+export function isDocumentExpired(expiresAt?: string | null): boolean {
+  if (!expiresAt) return false;
+  const exp = new Date(expiresAt).getTime();
+  if (isNaN(exp)) return false;
+  return exp <= Date.now();
+}
+
+/**
+ * Formats the remaining time until expiration into a human-friendly string.
+ * e.g. "45m", "18h", "6d", "Expired", or null if no expiration.
+ */
+export function formatExpiresIn(expiresAt?: string | null): string | null {
+  if (!expiresAt) return null;
+  const exp = new Date(expiresAt).getTime();
+  if (isNaN(exp)) return null;
+
+  const diffMs = exp - Date.now();
+  if (diffMs <= 0) return 'Expired';
+
+  const diffSecs = Math.floor(diffMs / 1000);
+  const diffMins = Math.floor(diffSecs / 60);
+  const diffHours = Math.floor(diffMins / 60);
+  const diffDays = Math.floor(diffHours / 24);
+
+  if (diffMins < 1) return '< 1m';
+  if (diffMins < 60) return `${diffMins}m`;
+  if (diffHours < 24) return `${diffHours}h`;
+  if (diffDays < 30) return `${diffDays}d`;
+  return formatDate(expiresAt);
+}
+
+

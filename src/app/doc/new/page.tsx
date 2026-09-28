@@ -160,6 +160,8 @@ export default function NewDocumentPage() {
     tags: string[];
     folder: string;
     isPublic: boolean;
+    ttl?: string | null;
+    expiresAt?: string | null;
   }): Promise<Document | null> => {
     try {
       const res = await fetch('/api/documents', {

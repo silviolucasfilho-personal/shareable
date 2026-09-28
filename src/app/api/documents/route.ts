@@ -90,7 +90,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { title, content, tags, folder, isPublic } = body;
+    const { title, content, tags, folder, isPublic, ttl, expiresAt } = body;
 
     if (!title && !content) {
       return NextResponse.json(
@@ -108,6 +108,8 @@ export async function POST(request: NextRequest) {
       ownerId: caller?.userId,
       ownerEmail: caller?.email,
       collaborators: [],
+      ttl,
+      expiresAt,
     });
 
     return NextResponse.json({ success: true, document: doc }, { status: 201 });

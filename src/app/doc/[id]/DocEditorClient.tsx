@@ -37,6 +37,8 @@ export default function DocEditorClient({ initialDocument }: DocEditorClientProp
     tags: string[];
     folder: string;
     isPublic: boolean;
+    ttl?: string | null;
+    expiresAt?: string | null;
   }): Promise<Document | null> => {
     if (isReadOnlyViewer) {
       alert('You have read-only permissions for this document.');

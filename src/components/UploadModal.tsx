@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useRef } from 'react';
-import { X, UploadCloud, FileText, FileCode, CheckCircle2, AlertCircle, Loader2, ShieldCheck, AlertTriangle } from 'lucide-react';
+import { X, UploadCloud, FileText, FileCode, CheckCircle2, AlertCircle, Loader2, ShieldCheck, AlertTriangle, Clock } from 'lucide-react';
 import { UserQuota } from '@/lib/types';
 
 interface UploadModalProps {
@@ -15,6 +15,7 @@ export default function UploadModal({ isOpen, onClose, onUploadSuccess, userQuot
   const [dragActive, setDragActive] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [folderName, setFolderName] = useState('');
+  const [ttl, setTtl] = useState('never');
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successCount, setSuccessCount] = useState<number | null>(null);
@@ -79,6 +80,9 @@ export default function UploadModal({ isOpen, onClose, onUploadSuccess, userQuot
       if (folderName.trim()) {
         formData.append('folder', folderName.trim());
       }
+      if (ttl && ttl !== 'never') {
+        formData.append('ttl', ttl);
+      }
 
       const res = await fetch('/api/upload', {
         method: 'POST',
@@ -93,6 +97,7 @@ export default function UploadModal({ isOpen, onClose, onUploadSuccess, userQuot
       setSuccessCount(data.count);
       setSelectedFiles([]);
       setFolderName('');
+      setTtl('never');
       setTimeout(() => {
         setSuccessCount(null);
         onUploadSuccess();
@@ -186,18 +191,38 @@ export default function UploadModal({ isOpen, onClose, onUploadSuccess, userQuot
           </div>
         </div>
 
-        {/* Destination folder */}
-        <div className="space-y-1.5">
-          <label className="text-xs font-semibold text-neutral-700 dark:text-neutral-300">
-            Assign Folder (Optional)
-          </label>
-          <input
-            type="text"
-            placeholder="e.g. Documentation, Notes, Guides"
-            value={folderName}
-            onChange={(e) => setFolderName(e.target.value)}
-            className="w-full px-3 py-2 text-sm bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 text-neutral-900 dark:text-neutral-100 placeholder-neutral-400"
-          />
+        {/* Destination folder & Expiration (TTL) */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-neutral-700 dark:text-neutral-300">
+              Assign Folder (Optional)
+            </label>
+            <input
+              type="text"
+              placeholder="e.g. Documentation, Notes"
+              value={folderName}
+              onChange={(e) => setFolderName(e.target.value)}
+              className="w-full px-3 py-2 text-sm bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 text-neutral-900 dark:text-neutral-100 placeholder-neutral-400"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-neutral-700 dark:text-neutral-300 flex items-center gap-1.5">
+              <Clock className="w-3.5 h-3.5 text-neutral-500" />
+              <span>Expiration (TTL)</span>
+            </label>
+            <select
+              value={ttl}
+              onChange={(e) => setTtl(e.target.value)}
+              className="w-full px-3 py-2 text-sm bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 text-neutral-900 dark:text-neutral-100 cursor-pointer"
+            >
+              <option value="never">Never (Persistent)</option>
+              <option value="1h">1 Hour</option>
+              <option value="24h">24 Hours (1 Day)</option>
+              <option value="7d">7 Days (1 Week)</option>
+              <option value="30d">30 Days (1 Month)</option>
+            </select>
+          </div>
         </div>
 
         {/* Error message */}

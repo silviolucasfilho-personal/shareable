@@ -38,6 +38,7 @@ export interface Document {
   ownerId?: string;
   ownerEmail?: string;
   collaborators?: Collaborator[];
+  expiresAt?: string | null;
 }
 
 export interface DocumentSummary {
@@ -57,6 +58,7 @@ export interface DocumentSummary {
   ownerId?: string;
   ownerEmail?: string;
   collaborators?: Collaborator[];
+  expiresAt?: string | null;
 }
 
 export interface CreateDocumentInput {
@@ -68,6 +70,8 @@ export interface CreateDocumentInput {
   ownerId?: string;
   ownerEmail?: string;
   collaborators?: Collaborator[];
+  expiresAt?: string | null;
+  ttl?: string | null;
 }
 
 export interface UpdateDocumentInput {
@@ -80,6 +84,8 @@ export interface UpdateDocumentInput {
   ownerId?: string;
   ownerEmail?: string;
   collaborators?: Collaborator[];
+  expiresAt?: string | null;
+  ttl?: string | null;
 }
 
 export interface DocumentFilter {

@@ -1,5 +1,5 @@
 import { Document, DocumentSummary, CreateDocumentInput, UpdateDocumentInput, DocumentFilter, UserRole, UserQuota } from './types';
-import { generateSlug, generateShareToken, extractExcerpt, calculateReadingTime, countWords } from './utils';
+import { generateSlug, generateShareToken, extractExcerpt, calculateReadingTime, countWords, calculateExpiresAt, isDocumentExpired } from './utils';
 import { getS3Engine, getStorageInfo } from './s3-client';
 import { getUserRole, calculateUserQuota, FREE_USER_DOC_LIMIT } from './roles';
 
@@ -68,6 +68,7 @@ async function rebuildIndex(): Promise<DocumentSummary[]> {
           ownerId: doc.ownerId,
           ownerEmail: doc.ownerEmail,
           collaborators: doc.collaborators || [],
+          expiresAt: doc.expiresAt,
         });
       }
     } catch (err) {
@@ -287,7 +288,34 @@ Standards and conventions for designing robust, scalable RESTful services.
   await engine.putObject(INDEX_KEY, JSON.stringify(summaries), 'application/json');
 }
 
+export async function purgeExpiredDocuments(): Promise<number> {
+  await ensureStorageInitialized();
+  const index = await getIndex();
+  const expiredDocs = index.filter((d) => isDocumentExpired(d.expiresAt));
+  if (expiredDocs.length === 0) return 0;
+
+  const engine = getS3Engine();
+  await Promise.all(
+    expiredDocs.map(async (doc) => {
+      try {
+        await Promise.all([
+          engine.deleteObject(s3Keys.document(doc.id)),
+          engine.deleteObject(s3Keys.metadata(doc.id)),
+          engine.deleteObject(s3Keys.share(doc.shareToken)),
+        ]);
+      } catch (err) {
+        console.error(`Failed to delete expired document ${doc.id}:`, err);
+      }
+    })
+  );
+
+  const remaining = index.filter((d) => !isDocumentExpired(d.expiresAt));
+  await saveIndex(remaining);
+  return expiredDocs.length;
+}
+
 export async function getDocuments(filter: DocumentFilter = {}): Promise<DocumentSummary[]> {
+  await purgeExpiredDocuments();
   const index = await getIndex();
   let results = [...index];
 
@@ -386,6 +414,10 @@ export async function getDocumentById(id: string): Promise<Document | null> {
 
   try {
     const meta = JSON.parse(metaRaw);
+    if (isDocumentExpired(meta.expiresAt)) {
+      await deleteDocument(id);
+      return null;
+    }
     return {
       ...meta,
       content: content || '',
@@ -407,13 +439,19 @@ export async function getDocumentByShareToken(token: string): Promise<Document |
   try {
     const { id } = JSON.parse(shareRaw);
     if (!id) return null;
-    return getDocumentById(id);
+    const doc = await getDocumentById(id);
+    if (!doc) {
+      await engine.deleteObject(s3Keys.share(token));
+      return null;
+    }
+    return doc;
   } catch {
     return null;
   }
 }
 
 export async function getUserDocumentCount(userEmail?: string, userId?: string): Promise<number> {
+  await purgeExpiredDocuments();
   const index = await getIndex();
   if (!userEmail && !userId) {
     return 0;
@@ -500,6 +538,9 @@ export async function createDocument(input: CreateDocumentInput): Promise<Docume
   const ownerId = input.ownerId;
   const ownerEmail = input.ownerEmail;
   const collaborators = input.collaborators || [];
+  const expiresAt = input.expiresAt !== undefined
+    ? (input.expiresAt ? (calculateExpiresAt(input.expiresAt) || input.expiresAt) : null)
+    : (input.ttl ? calculateExpiresAt(input.ttl) : null);
 
   const doc: Document = {
     id,
@@ -516,6 +557,7 @@ export async function createDocument(input: CreateDocumentInput): Promise<Docume
     ownerId,
     ownerEmail,
     collaborators,
+    expiresAt,
   };
 
   // 1. Put document content in S3
@@ -554,6 +596,7 @@ export async function createDocument(input: CreateDocumentInput): Promise<Docume
     ownerId,
     ownerEmail,
     collaborators,
+    expiresAt,
   };
 
   index.unshift(summary);
@@ -578,6 +621,12 @@ export async function updateDocument(id: string, input: UpdateDocumentInput): Pr
   const newOwnerId = input.ownerId !== undefined ? input.ownerId : existing.ownerId;
   const newOwnerEmail = input.ownerEmail !== undefined ? input.ownerEmail : existing.ownerEmail;
   const newCollaborators = input.collaborators !== undefined ? input.collaborators : (existing.collaborators || []);
+  let newExpiresAt = existing.expiresAt;
+  if (input.expiresAt !== undefined) {
+    newExpiresAt = input.expiresAt ? (calculateExpiresAt(input.expiresAt) || input.expiresAt) : null;
+  } else if (input.ttl !== undefined) {
+    newExpiresAt = calculateExpiresAt(input.ttl);
+  }
 
   const updatedDoc: Document = {
     ...existing,
@@ -590,6 +639,7 @@ export async function updateDocument(id: string, input: UpdateDocumentInput): Pr
     ownerId: newOwnerId,
     ownerEmail: newOwnerEmail,
     collaborators: newCollaborators,
+    expiresAt: newExpiresAt,
     updatedAt: now,
   };
 
@@ -620,6 +670,7 @@ export async function updateDocument(id: string, input: UpdateDocumentInput): Pr
       ownerId: newOwnerId,
       ownerEmail: newOwnerEmail,
       collaborators: newCollaborators,
+      expiresAt: newExpiresAt,
       wordCount: countWords(newContent),
       readingTimeMinutes: calculateReadingTime(newContent),
       updatedAt: now,
@@ -631,17 +682,28 @@ export async function updateDocument(id: string, input: UpdateDocumentInput): Pr
 }
 
 export async function deleteDocument(id: string): Promise<boolean> {
-  const doc = await getDocumentById(id);
-  if (!doc) return false;
-
+  await ensureStorageInitialized();
   const engine = getS3Engine();
+  const metaRaw = await engine.getObject(s3Keys.metadata(id));
+  if (!metaRaw) return false;
+
+  let shareToken = '';
+  try {
+    const meta = JSON.parse(metaRaw);
+    shareToken = meta.shareToken;
+  } catch {
+    // If corrupt, proceed to delete document and metadata
+  }
 
   // 1. Delete markdown, metadata, and share objects from S3
-  await Promise.all([
+  const deletePromises = [
     engine.deleteObject(s3Keys.document(id)),
     engine.deleteObject(s3Keys.metadata(id)),
-    engine.deleteObject(s3Keys.share(doc.shareToken)),
-  ]);
+  ];
+  if (shareToken) {
+    deletePromises.push(engine.deleteObject(s3Keys.share(shareToken)));
+  }
+  await Promise.all(deletePromises);
 
   // 2. Remove from index
   const index = await getIndex();
@@ -719,6 +781,7 @@ export async function incrementViewCount(shareToken: string): Promise<void> {
 }
 
 export async function getAllTags(): Promise<{ tag: string; count: number }[]> {
+  await purgeExpiredDocuments();
   const docs = await getIndex();
   const tagCountMap: Record<string, number> = {};
 
@@ -737,6 +800,7 @@ export async function getAllTags(): Promise<{ tag: string; count: number }[]> {
 }
 
 export async function getAllFolders(): Promise<{ folder: string; count: number }[]> {
+  await purgeExpiredDocuments();
   const docs = await getIndex();
   const folderCountMap: Record<string, number> = {};
 
@@ -753,6 +817,7 @@ export async function getAllFolders(): Promise<{ folder: string; count: number }
 }
 
 export async function getRepositoryStats() {
+  await purgeExpiredDocuments();
   const docs = await getIndex();
   const tags = await getAllTags();
   const folders = await getAllFolders();

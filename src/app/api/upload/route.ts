@@ -8,7 +8,7 @@ import { getAuthenticatedUser } from '@/lib/amplify-server-utils';
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Title, X-Folder, X-Tags, X-Filename',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Title, X-Folder, X-Tags, X-Filename, X-TTL, X-Expires-At',
 };
 
 const turndown = new TurndownService({
@@ -25,6 +25,8 @@ interface DocumentInput {
   tags?: string[];
   folder?: string;
   isPublic?: boolean;
+  ttl?: string | null;
+  expiresAt?: string | null;
 }
 
 function isHtmlDocument(text: string, fileName?: string): boolean {
@@ -48,6 +50,8 @@ function parseDocumentContent(
     folder?: string | null;
     tags?: string[] | string | null;
     isPublic?: boolean | null;
+    ttl?: string | null;
+    expiresAt?: string | null;
   }
 ): DocumentInput {
   let title = overrides?.title?.trim() || '';
@@ -64,6 +68,8 @@ function parseDocumentContent(
 
   let folder = overrides?.folder?.trim() || '';
   let isPublic = overrides?.isPublic !== undefined && overrides.isPublic !== null ? overrides.isPublic : true;
+  let ttl = overrides?.ttl !== undefined ? overrides.ttl : null;
+  let expiresAt = overrides?.expiresAt !== undefined ? overrides.expiresAt : null;
   let content = rawText;
 
   // 1. First, parse YAML frontmatter if present
@@ -88,6 +94,12 @@ function parseDocumentContent(
     }
     if (overrides?.isPublic === undefined && typeof parsed.data.isPublic === 'boolean') {
       isPublic = parsed.data.isPublic;
+    }
+    if (overrides?.ttl === undefined && parsed.data.ttl) {
+      ttl = String(parsed.data.ttl).trim();
+    }
+    if (overrides?.expiresAt === undefined && parsed.data.expiresAt) {
+      expiresAt = String(parsed.data.expiresAt).trim();
     }
     content = parsed.content.trim() || rawText;
   } catch {
@@ -126,6 +138,14 @@ function parseDocumentContent(
       const folderMeta = content.match(/<meta[^>]*name=["'](folder|category)["'][^>]*content=["']([^"']+)["']/i);
       if (folderMeta && folderMeta[2]) {
         folder = folderMeta[2].trim();
+      }
+    }
+
+    // Extract meta TTL / expiration
+    if (!ttl && !expiresAt) {
+      const ttlMeta = content.match(/<meta[^>]*name=["'](ttl|expires-at|expires_at)["'][^>]*content=["']([^"']+)["']/i);
+      if (ttlMeta && ttlMeta[2]) {
+        ttl = ttlMeta[2].trim();
       }
     }
 
@@ -174,6 +194,8 @@ function parseDocumentContent(
     tags,
     folder,
     isPublic,
+    ttl,
+    expiresAt,
   };
 }
 
@@ -220,19 +242,23 @@ export async function GET(request: NextRequest) {
             title: '(Optional) Custom title override',
             tags: '(Optional) Comma-separated list of tags',
             isPublic: '(Optional) Boolean flag, default true',
+            ttl: '(Optional) Document time-to-live preset (e.g. 1h, 24h, 7d, 30d, never)',
+            expiresAt: '(Optional) Explicit ISO expiration timestamp',
           },
           rawBodyHeadersOrQueryParams: {
             'X-Title' : 'Custom title (or query param ?title=...)',
             'X-Folder': 'Folder name (or query param ?folder=...)',
             'X-Tags'  : 'Comma-separated tags (or query param ?tags=...)',
             'X-Filename': 'Original filename (or query param ?filename=...)',
+            'X-TTL'   : 'TTL preset e.g. 1h, 24h, 7d, 30d (or query param ?ttl=...)',
+            'X-Expires-At': 'ISO expiration timestamp (or query param ?expiresAt=...)',
             'isPublic': 'Query param ?isPublic=true|false',
           },
           examples: {
-            curlMultipart: `curl -F "file=@example.html" -F "folder=Docs" ${baseUrl}/api/upload`,
-            curlRawMarkdown: `curl -X POST -H "Content-Type: text/markdown" -H "X-Title: My Doc" --data-binary @example.md ${baseUrl}/api/upload`,
+            curlMultipart: `curl -F "file=@example.html" -F "folder=Docs" -F "ttl=24h" ${baseUrl}/api/upload`,
+            curlRawMarkdown: `curl -X POST -H "Content-Type: text/markdown" -H "X-Title: My Doc" -H "X-TTL: 7d" --data-binary @example.md ${baseUrl}/api/upload`,
             curlRawHtml: `curl -X POST -H "Content-Type: text/html" -H "X-Title: Web Report" --data-binary @report.html ${baseUrl}/api/upload`,
-            curlJson: `curl -X POST -H "Content-Type: application/json" -d '{"title":"API Guide","content":"# Intro to API"}' ${baseUrl}/api/upload`,
+            curlJson: `curl -X POST -H "Content-Type: application/json" -d '{"title":"API Guide","content":"# Intro to API","ttl":"30d"}' ${baseUrl}/api/upload`,
           },
         },
       },
@@ -258,6 +284,14 @@ export async function POST(request: NextRequest) {
     const queryTags = searchParams.get('tags');
     const queryIsPublic = searchParams.get('isPublic');
     const isPublicParam = queryIsPublic !== null ? queryIsPublic !== 'false' : undefined;
+    const queryTtl = searchParams.get('ttl');
+    const queryExpiresAt = searchParams.get('expiresAt');
+
+    const headerTitle = request.headers.get('x-title') || queryTitle;
+    const headerFolder = request.headers.get('x-folder') || queryFolder;
+    const headerTags = request.headers.get('x-tags') || queryTags;
+    const headerTtl = request.headers.get('x-ttl') || queryTtl;
+    const headerExpiresAt = request.headers.get('x-expires-at') || queryExpiresAt;
 
     const toCreate: DocumentInput[] = [];
 
@@ -302,11 +336,13 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      const formFolder = (formData.get('folder') as string | null) || queryFolder;
-      const formTitle = (formData.get('title') as string | null) || queryTitle;
-      const formTags = (formData.get('tags') as string | null) || queryTags;
+      const formFolder = (formData.get('folder') as string | null) || headerFolder;
+      const formTitle = (formData.get('title') as string | null) || headerTitle;
+      const formTags = (formData.get('tags') as string | null) || headerTags;
       const formIsPublicStr = formData.get('isPublic') as string | null;
       const formIsPublic = formIsPublicStr !== null ? formIsPublicStr !== 'false' : isPublicParam;
+      const formTtl = (formData.get('ttl') as string | null) || headerTtl;
+      const formExpiresAt = (formData.get('expiresAt') as string | null) || headerExpiresAt;
 
       for (const file of rawFiles) {
         const text = await file.text();
@@ -315,6 +351,8 @@ export async function POST(request: NextRequest) {
           folder: formFolder,
           tags: formTags,
           isPublic: formIsPublic,
+          ttl: formTtl,
+          expiresAt: formExpiresAt,
         });
         toCreate.push(parsed);
       }
@@ -334,9 +372,6 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      const headerTitle = request.headers.get('x-title') || queryTitle;
-      const headerFolder = request.headers.get('x-folder') || queryFolder;
-      const headerTags = request.headers.get('x-tags') || queryTags;
       const fileName = request.headers.get('x-filename') || searchParams.get('filename') || undefined;
 
       const parsed = parseDocumentContent(rawText, fileName, {
@@ -344,6 +379,8 @@ export async function POST(request: NextRequest) {
         folder: headerFolder,
         tags: headerTags,
         isPublic: isPublicParam,
+        ttl: headerTtl,
+        expiresAt: headerExpiresAt,
       });
       toCreate.push(parsed);
     }
@@ -356,9 +393,11 @@ export async function POST(request: NextRequest) {
           if (item && typeof item === 'object' && (item.content || item.title)) {
             const parsed = parseDocumentContent(item.content || '', undefined, {
               title: item.title,
-              folder: item.folder || queryFolder,
-              tags: item.tags || queryTags,
+              folder: item.folder || headerFolder,
+              tags: item.tags || headerTags,
               isPublic: typeof item.isPublic === 'boolean' ? item.isPublic : isPublicParam,
+              ttl: item.ttl || headerTtl,
+              expiresAt: item.expiresAt || headerExpiresAt,
             });
             toCreate.push(parsed);
           }
@@ -373,10 +412,12 @@ export async function POST(request: NextRequest) {
         }
 
         const parsed = parseDocumentContent(content, body.filename, {
-          title: body.title || queryTitle,
-          folder: body.folder || queryFolder,
-          tags: body.tags || queryTags,
+          title: body.title || headerTitle,
+          folder: body.folder || headerFolder,
+          tags: body.tags || headerTags,
           isPublic: typeof body.isPublic === 'boolean' ? body.isPublic : isPublicParam,
+          ttl: body.ttl || headerTtl,
+          expiresAt: body.expiresAt || headerExpiresAt,
         });
         toCreate.push(parsed);
       } else {
@@ -400,10 +441,12 @@ export async function POST(request: NextRequest) {
       }
 
       const parsed = parseDocumentContent(rawText, undefined, {
-        title: queryTitle,
-        folder: queryFolder,
-        tags: queryTags,
+        title: headerTitle,
+        folder: headerFolder,
+        tags: headerTags,
         isPublic: isPublicParam,
+        ttl: headerTtl,
+        expiresAt: headerExpiresAt,
       });
       toCreate.push(parsed);
     }
@@ -442,6 +485,8 @@ export async function POST(request: NextRequest) {
         tags: docInput.tags,
         folder: docInput.folder,
         isPublic: docInput.isPublic,
+        ttl: docInput.ttl,
+        expiresAt: docInput.expiresAt,
         ownerId: caller?.userId,
         ownerEmail: caller?.email,
       });
