@@ -538,8 +538,8 @@ export async function createDocument(input: CreateDocumentInput): Promise<Docume
   const ownerId = input.ownerId;
   const ownerEmail = input.ownerEmail;
   const collaborators = input.collaborators || [];
-  const expiresAt = input.expiresAt !== undefined
-    ? (input.expiresAt ? (calculateExpiresAt(input.expiresAt) || input.expiresAt) : null)
+  const expiresAt = input.expiresAt
+    ? (calculateExpiresAt(input.expiresAt) || input.expiresAt)
     : (input.ttl ? calculateExpiresAt(input.ttl) : null);
 
   const doc: Document = {
@@ -622,10 +622,12 @@ export async function updateDocument(id: string, input: UpdateDocumentInput): Pr
   const newOwnerEmail = input.ownerEmail !== undefined ? input.ownerEmail : existing.ownerEmail;
   const newCollaborators = input.collaborators !== undefined ? input.collaborators : (existing.collaborators || []);
   let newExpiresAt = existing.expiresAt;
-  if (input.expiresAt !== undefined) {
-    newExpiresAt = input.expiresAt ? (calculateExpiresAt(input.expiresAt) || input.expiresAt) : null;
-  } else if (input.ttl !== undefined) {
+  if (input.expiresAt) {
+    newExpiresAt = calculateExpiresAt(input.expiresAt) || input.expiresAt;
+  } else if (input.ttl) {
     newExpiresAt = calculateExpiresAt(input.ttl);
+  } else if (input.expiresAt === null || input.ttl === null || input.ttl === 'never') {
+    newExpiresAt = null;
   }
 
   const updatedDoc: Document = {
