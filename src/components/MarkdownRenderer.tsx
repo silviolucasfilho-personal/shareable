@@ -10,16 +10,28 @@ import rehypeHighlight from 'rehype-highlight';
 import rehypeSlug from 'rehype-slug';
 import 'katex/dist/katex.min.css';
 import { Check, Copy, ExternalLink } from 'lucide-react';
+import MermaidRenderer from './MermaidRenderer';
 
 interface MarkdownRendererProps {
   content: string;
   className?: string;
 }
 
+function extractCodeString(node: React.ReactNode): string {
+  if (typeof node === 'string') return node;
+  if (typeof node === 'number') return String(node);
+  if (!node) return '';
+  if (Array.isArray(node)) return node.map(extractCodeString).join('');
+  if (React.isValidElement(node) && (node.props as { children?: React.ReactNode })?.children) {
+    return extractCodeString((node.props as { children?: React.ReactNode }).children);
+  }
+  return '';
+}
+
 function CodeBlock({ children, className, ...props }: React.ComponentPropsWithoutRef<'code'>) {
   const [copied, setCopied] = useState(false);
   const match = /language-(\w+)/.exec(className || '');
-  const language = match ? match[1] : '';
+  const language = match ? match[1].toLowerCase() : '';
   const isInline = !className && typeof children === 'string' && !children.includes('\n');
 
   if (isInline) {
@@ -30,7 +42,11 @@ function CodeBlock({ children, className, ...props }: React.ComponentPropsWithou
     );
   }
 
-  const codeText = String(children).replace(/\n$/, '');
+  const codeText = extractCodeString(children).replace(/\n$/, '');
+
+  if (language === 'mermaid') {
+    return <MermaidRenderer code={codeText} />;
+  }
 
   const handleCopy = () => {
     navigator.clipboard.writeText(codeText);
@@ -76,6 +92,12 @@ export default function MarkdownRenderer({ content, className = '' }: MarkdownRe
         remarkPlugins={[remarkGfm, remarkMath]}
         rehypePlugins={[rehypeRaw, rehypeKatex, rehypeHighlight, rehypeSlug]}
         components={{
+          pre: ({ children, ...props }) => {
+            if (React.isValidElement(children)) {
+              return <>{children}</>;
+            }
+            return <pre {...props}>{children}</pre>;
+          },
           code: CodeBlock,
           a: ({ href, children, ...props }) => {
             const isExternal = href?.startsWith('http');
