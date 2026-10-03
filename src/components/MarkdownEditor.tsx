@@ -30,6 +30,8 @@ import {
   Folder,
   Tag,
   ArrowLeft,
+  Globe,
+  Lock,
 } from 'lucide-react';
 import Link from 'next/link';
 import MarkdownRenderer from './MarkdownRenderer';
@@ -96,6 +98,46 @@ export default function MarkdownEditor({
   const [savedDoc, setSavedDoc] = useState<Document | undefined>(initialDocument);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Sync when initialDocument updates from outside (e.g. ShareModal)
+  useEffect(() => {
+    if (initialDocument) {
+      if (initialDocument.isPublic !== undefined) {
+        setIsPublic(initialDocument.isPublic);
+      }
+      setSavedDoc(initialDocument);
+    }
+  }, [initialDocument]);
+
+  const handleToggleVisibility = async () => {
+    if (readOnly) return;
+    const nextPublic = !isPublic;
+    setIsPublic(nextPublic);
+    setIsSaved(false);
+
+    if (savedDoc?.id) {
+      setIsSaving(true);
+      try {
+        const doc = await onSave({
+          title: title.trim() || 'Untitled Document',
+          content,
+          tags,
+          folder: folder.trim(),
+          isPublic: nextPublic,
+          ttl: ttl === 'keep' ? undefined : ttl,
+          expiresAt: ttl === 'never' ? null : undefined,
+        });
+        if (doc) {
+          setSavedDoc(doc);
+          setIsSaved(true);
+        }
+      } catch (err) {
+        console.error('Failed to update visibility:', err);
+      } finally {
+        setIsSaving(false);
+      }
+    }
+  };
 
   const handleSave = useCallback(async () => {
     if (readOnly || isSaving) return;
@@ -292,6 +334,39 @@ export default function MarkdownEditor({
             title="Download .md file"
           >
             <Download className="w-4 h-4" />
+          </button>
+
+          {/* Visibility Toggle Button */}
+          <button
+            type="button"
+            disabled={readOnly}
+            onClick={handleToggleVisibility}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-semibold transition-all cursor-pointer disabled:cursor-default ${
+              isPublic
+                ? 'border-emerald-200 dark:border-emerald-800/60 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/50'
+                : 'border-amber-200 dark:border-amber-800/60 bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/50'
+            }`}
+            title={
+              readOnly
+                ? isPublic
+                  ? 'Public Document'
+                  : 'Private Document'
+                : isPublic
+                ? 'Public Document: Visible to everyone (Click to make Private)'
+                : 'Private Document: Only you and invited collaborators can view (Click to make Public)'
+            }
+          >
+            {isPublic ? (
+              <>
+                <Globe className="w-3.5 h-3.5 text-emerald-500" />
+                <span>Public</span>
+              </>
+            ) : (
+              <>
+                <Lock className="w-3.5 h-3.5 text-amber-500" />
+                <span>Private</span>
+              </>
+            )}
           </button>
 
           {readOnly ? (

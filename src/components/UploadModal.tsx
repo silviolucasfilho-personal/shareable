@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useRef } from 'react';
-import { X, UploadCloud, FileText, FileCode, CheckCircle2, AlertCircle, Loader2, ShieldCheck, AlertTriangle, Clock } from 'lucide-react';
+import { X, UploadCloud, FileText, FileCode, CheckCircle2, AlertCircle, Loader2, ShieldCheck, AlertTriangle, Clock, Globe, Lock } from 'lucide-react';
 import { UserQuota } from '@/lib/types';
 
 interface UploadModalProps {
@@ -16,6 +16,7 @@ export default function UploadModal({ isOpen, onClose, onUploadSuccess, userQuot
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [folderName, setFolderName] = useState('');
   const [ttl, setTtl] = useState('never');
+  const [isPublic, setIsPublic] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successCount, setSuccessCount] = useState<number | null>(null);
@@ -83,6 +84,7 @@ export default function UploadModal({ isOpen, onClose, onUploadSuccess, userQuot
       if (ttl && ttl !== 'never') {
         formData.append('ttl', ttl);
       }
+      formData.append('isPublic', String(isPublic));
 
       const res = await fetch('/api/upload', {
         method: 'POST',
@@ -98,6 +100,7 @@ export default function UploadModal({ isOpen, onClose, onUploadSuccess, userQuot
       setSelectedFiles([]);
       setFolderName('');
       setTtl('never');
+      setIsPublic(false);
       setTimeout(() => {
         setSuccessCount(null);
         onUploadSuccess();
@@ -222,6 +225,46 @@ export default function UploadModal({ isOpen, onClose, onUploadSuccess, userQuot
               <option value="7d">7 Days (1 Week)</option>
               <option value="30d">30 Days (1 Month)</option>
             </select>
+          </div>
+        </div>
+
+        {/* Document Visibility Selector */}
+        <div className="space-y-1.5">
+          <label className="text-xs font-semibold text-neutral-700 dark:text-neutral-300 flex items-center gap-1.5">
+            {isPublic ? <Globe className="w-3.5 h-3.5 text-emerald-500" /> : <Lock className="w-3.5 h-3.5 text-amber-500" />}
+            <span>Visibility</span>
+          </label>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => setIsPublic(false)}
+              className={`flex items-start gap-2.5 p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                !isPublic
+                  ? 'border-amber-500 bg-amber-50/70 dark:bg-amber-950/30 text-amber-900 dark:text-amber-200 shadow-2xs'
+                  : 'border-neutral-200 dark:border-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-800 text-neutral-600 dark:text-neutral-400'
+              }`}
+            >
+              <Lock className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+              <div>
+                <div className="text-xs font-semibold">Private (Default)</div>
+                <div className="text-[10px] opacity-75 mt-0.5">Only you and invited collaborators</div>
+              </div>
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsPublic(true)}
+              className={`flex items-start gap-2.5 p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                isPublic
+                  ? 'border-emerald-500 bg-emerald-50/70 dark:bg-emerald-950/30 text-emerald-900 dark:text-emerald-200 shadow-2xs'
+                  : 'border-neutral-200 dark:border-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-800 text-neutral-600 dark:text-neutral-400'
+              }`}
+            >
+              <Globe className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+              <div>
+                <div className="text-xs font-semibold">Public</div>
+                <div className="text-[10px] opacity-75 mt-0.5">Visible to everyone in repository</div>
+              </div>
+            </button>
           </div>
         </div>
 

@@ -9,7 +9,7 @@ FOLDER=""
 TAGS=""
 TTL=""
 EXPIRES_AT=""
-IS_PUBLIC="true"
+IS_PUBLIC="false"
 OUTPUT_JSON=false
 
 usage() {
@@ -26,15 +26,15 @@ Options:
   -T, --tags <tags>        Comma-separated tags (e.g. "api,guide,rfc")
   -l, --ttl <duration>     Time-To-Live expiration (e.g. 1h, 24h, 7d, 30d, never)
   -e, --expires-at <iso>   Explicit ISO expiration date (e.g. 2026-10-15T00:00:00Z)
-      --public             Make document public (default)
-      --private            Make document restricted/unlisted
+      --public             Make document public in repository
+      --private            Make document private (default)
   -u, --url <url>          Shareable instance base URL (default: https://main.d1yv1vn3p51ec7.amplifyapp.com)
   -j, --json               Output raw JSON response
   -h, --help               Show this help message
 
 Examples:
   upload.sh -f README.md -F "Documentation" -T "guide,overview"
-  upload.sh -f spec.md -t "API Spec v2" --ttl 7d
+  upload.sh -f spec.md -t "API Spec v2" --public --ttl 7d
   cat notes.md | upload.sh -t "Meeting Notes" -F "Meetings"
 EOF
   exit 0
@@ -190,9 +190,13 @@ for i, doc in enumerate(docs, 1):
     share_url = f"{base_url}/s/{share_token}" if share_token else "N/A"
     doc_url = f"{base_url}/doc/{doc_id}" if doc_id else "N/A"
     
+    is_pub = doc.get("isPublic", False)
+    visibility_label = "🌐 Public" if is_pub else "🔒 Private"
+    
     if len(docs) > 1:
         print(f"--- Document {i} ---")
     print(f"📄 Title:      {title}")
+    print(f"🔒 Visibility: {visibility_label}")
     print(f"📁 Folder:     {folder}")
     print(f"🏷️  Tags:       {tags}")
     if expires_at:

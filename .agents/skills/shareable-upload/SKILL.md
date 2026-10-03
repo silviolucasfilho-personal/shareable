@@ -21,13 +21,19 @@ When the user asks to upload or share a document, follow these steps:
 - **TTL / Expiration** *(optional)*:
   - Presets: `1h` (1 hour), `24h` (1 day), `7d` (1 week), `30d` (1 month), `never` (persistent).
   - Or custom duration (`15m`, `2w`) or ISO 8601 date.
+- **Visibility** *(optional)*:
+  - **Private** (default): Only accessible to the owner and invited collaborators.
+  - **Public** (`--public`): Accessible to anyone with the link and listed in the public repository.
 
 ### 2. Execute the Upload Script
 Use the bundled CLI helper script located at [scripts/upload.sh](./scripts/upload.sh):
 
 ```bash
-# Upload a single file
+# Upload a private file (default)
 ~/.gemini/config/skills/shareable-upload/scripts/upload.sh -f "path/to/document.md" -F "Documentation" -T "guide,api" --ttl "7d"
+
+# Upload as publicly visible document
+~/.gemini/config/skills/shareable-upload/scripts/upload.sh -f "path/to/document.md" --public -F "Documentation" -T "guide,api"
 
 # Upload with custom title override
 ~/.gemini/config/skills/shareable-upload/scripts/upload.sh -f "notes.txt" -t "Q3 Roadmap Discussion" -F "Meetings"
@@ -43,11 +49,19 @@ EOF
 If invoking without the helper script, make a direct HTTP request to the API:
 
 ```bash
+# Private by default
 curl -s -X POST \
   -F "file=@path/to/document.md" \
   -F "folder=Documentation" \
   -F "tags=api,guide" \
   -F "ttl=7d" \
+  https://main.d1yv1vn3p51ec7.amplifyapp.com/api/upload
+
+# Explicitly public
+curl -s -X POST \
+  -F "file=@path/to/document.md" \
+  -F "folder=Documentation" \
+  -F "isPublic=true" \
   https://main.d1yv1vn3p51ec7.amplifyapp.com/api/upload
 ```
 *(For complete endpoint schemas, JSON payloads, and header options, consult [references/api.md](./references/api.md).)*
@@ -57,6 +71,7 @@ curl -s -X POST \
 ## 4. Report Results to User
 Always format the response with the clickable links:
 
+- **Visibility**: State whether the document is 🔒 **Private** or 🌐 **Public**.
 - **Share Link (Visitor)**: `https://main.d1yv1vn3p51ec7.amplifyapp.com/s/<shareToken>`
 - **Document Link (Editor)**: `https://main.d1yv1vn3p51ec7.amplifyapp.com/doc/<id>`
 - **Folder & Tags**: Display assigned category and tags.

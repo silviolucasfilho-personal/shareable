@@ -457,7 +457,7 @@ export default function RepositoryDashboard() {
                 <span>{stats.sharedDocuments}</span>
               </button>
 
-              {/* Unlisted Links */}
+              {/* Private Documents */}
               <button
                 type="button"
                 onClick={() => {
@@ -474,7 +474,7 @@ export default function RepositoryDashboard() {
               >
                 <span className="flex items-center gap-2">
                   <Lock className="w-4 h-4 text-amber-500" />
-                  Unlisted Links
+                  Private Documents
                 </span>
                 <span>{stats.totalDocuments - stats.sharedDocuments}</span>
               </button>
@@ -659,7 +659,7 @@ export default function RepositoryDashboard() {
                 )}
                 {filterPublic !== null && (
                   <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-neutral-200 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 font-medium">
-                    {filterPublic ? 'Public only' : 'Unlisted only'}
+                    {filterPublic ? 'Public only' : 'Private only'}
                     <button onClick={() => setFilterPublic(null)} className="hover:text-neutral-900 ml-1">
                       ×
                     </button>

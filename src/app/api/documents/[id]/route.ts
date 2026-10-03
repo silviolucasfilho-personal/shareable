@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDocumentById, updateDocument, deleteDocument } from '@/lib/storage';
 import { getAuthenticatedUser } from '@/lib/amplify-server-utils';
+import { canUserViewDocument, canUserEditDocument, isDocumentOwner } from '@/lib/permissions';
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -15,41 +16,21 @@ export async function GET(request: NextRequest, context: RouteContext) {
       return NextResponse.json({ success: false, error: 'Document not found' }, { status: 404 });
     }
 
-    // If public in repo, allow reading
-    if (doc.isPublic) {
-      return NextResponse.json({ success: true, document: doc });
-    }
-
-    // Check caller permission for restricted / unlisted documents
     const caller = await getAuthenticatedUser(request);
-    if (!caller) {
-      // If no owner is assigned to document (legacy/sample), allow view
-      if (!doc.ownerEmail && !doc.ownerId && (!doc.collaborators || doc.collaborators.length === 0)) {
-        return NextResponse.json({ success: true, document: doc });
+    if (!canUserViewDocument(doc, caller?.email, caller?.userId)) {
+      if (!caller) {
+        return NextResponse.json(
+          { success: false, error: 'This document is private. Please sign in to access.' },
+          { status: 401 }
+        );
       }
       return NextResponse.json(
-        { success: false, error: 'Authentication required to view this private document' },
-        { status: 401 }
+        { success: false, error: 'You do not have permission to view this private document' },
+        { status: 403 }
       );
     }
 
-    const callerEmail = caller.email.toLowerCase();
-    const isOwner =
-      (doc.ownerEmail && doc.ownerEmail.toLowerCase() === callerEmail) ||
-      (doc.ownerId && doc.ownerId === caller.userId);
-
-    const isCollaborator = doc.collaborators?.some(
-      (c) => c.email.toLowerCase() === callerEmail
-    );
-
-    if (isOwner || isCollaborator) {
-      return NextResponse.json({ success: true, document: doc });
-    }
-
-    return NextResponse.json(
-      { success: false, error: 'You do not have permission to view this document' },
-      { status: 403 }
-    );
+    return NextResponse.json({ success: true, document: doc });
   } catch (error) {
     console.error('Failed to get document from S3:', error);
     return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 });
@@ -76,32 +57,26 @@ export async function PUT(request: NextRequest, context: RouteContext) {
         );
       }
 
-      const callerEmail = caller.email.toLowerCase();
-      const isOwner =
-        (doc.ownerEmail && doc.ownerEmail.toLowerCase() === callerEmail) ||
-        (doc.ownerId && doc.ownerId === caller.userId);
-
-      const collaborator = doc.collaborators?.find(
-        (c) => c.email.toLowerCase() === callerEmail
-      );
-
-      if (!isOwner) {
-        if (!collaborator) {
-          return NextResponse.json(
-            { success: false, error: 'You do not have permission to edit this document' },
-            { status: 403 }
-          );
-        }
-        if (collaborator.role !== 'editor') {
-          return NextResponse.json(
-            { success: false, error: 'You have read-only (viewer) access to this document' },
-            { status: 403 }
-          );
-        }
+      if (!canUserEditDocument(doc, caller.email, caller.userId)) {
+        return NextResponse.json(
+          { success: false, error: 'You do not have permission to edit this document' },
+          { status: 403 }
+        );
       }
     }
 
     const body = await request.json();
+
+    // Only owner can change visibility (isPublic)
+    if (body.isPublic !== undefined && body.isPublic !== doc.isPublic) {
+      if (!isDocumentOwner(doc, caller?.email, caller?.userId)) {
+        return NextResponse.json(
+          { success: false, error: 'Only the document owner can change visibility settings' },
+          { status: 403 }
+        );
+      }
+    }
+
     const updated = await updateDocument(id, body);
     if (!updated) {
       return NextResponse.json({ success: false, error: 'Document not found' }, { status: 404 });
@@ -134,12 +109,7 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
         );
       }
 
-      const callerEmail = caller.email.toLowerCase();
-      const isOwner =
-        (doc.ownerEmail && doc.ownerEmail.toLowerCase() === callerEmail) ||
-        (doc.ownerId && doc.ownerId === caller.userId);
-
-      if (!isOwner) {
+      if (!isDocumentOwner(doc, caller.email, caller.userId)) {
         return NextResponse.json(
           { success: false, error: 'Only the document owner can delete this document' },
           { status: 403 }

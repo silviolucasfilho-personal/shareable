@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
 
     const [documents, stats, tags, folders, userQuota] = await Promise.all([
       getDocuments(filter),
-      getRepositoryStats(),
+      getRepositoryStats(caller.email, caller.userId),
       getAllTags(),
       getAllFolders(),
       canUserCreateDocument(caller.email, caller.userId, 0),

@@ -2,6 +2,7 @@ import { Document, DocumentSummary, CreateDocumentInput, UpdateDocumentInput, Do
 import { generateSlug, generateShareToken, extractExcerpt, calculateReadingTime, countWords, calculateExpiresAt, isDocumentExpired } from './utils';
 import { getS3Engine, getStorageInfo } from './s3-client';
 import { getUserRole, calculateUserQuota, FREE_USER_DOC_LIMIT } from './roles';
+import { canUserViewDocument } from './permissions';
 
 const INDEX_KEY = 'index/documents-index.json';
 
@@ -320,6 +321,9 @@ export async function getDocuments(filter: DocumentFilter = {}): Promise<Documen
   let results = [...index];
 
   const { query, tag, folder, isPublic, sortBy = 'updated_desc', scope, userEmail, userId } = filter;
+
+  // Enforce privacy: Exclude private documents that the caller is not authorized to view
+  results = results.filter((d) => canUserViewDocument(d, userEmail, userId));
 
   if (scope === 'mine' && (userId || userEmail)) {
     const normalizedEmail = userEmail?.toLowerCase();
@@ -818,15 +822,16 @@ export async function getAllFolders(): Promise<{ folder: string; count: number }
     .sort((a, b) => a.folder.localeCompare(b.folder));
 }
 
-export async function getRepositoryStats() {
+export async function getRepositoryStats(userEmail?: string | null, userId?: string | null) {
   await purgeExpiredDocuments();
   const docs = await getIndex();
+  const visibleDocs = docs.filter((d) => canUserViewDocument(d, userEmail, userId));
   const tags = await getAllTags();
   const folders = await getAllFolders();
 
-  const totalDocuments = docs.length;
-  const sharedDocuments = docs.filter((d) => d.isPublic).length;
-  const totalViews = docs.reduce((acc, d) => acc + (d.viewCount || 0), 0);
+  const totalDocuments = visibleDocs.length;
+  const sharedDocuments = visibleDocs.filter((d) => d.isPublic).length;
+  const totalViews = visibleDocs.reduce((acc, d) => acc + (d.viewCount || 0), 0);
 
   return {
     totalDocuments,

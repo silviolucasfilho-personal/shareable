@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { Document, CollaboratorRole, Collaborator } from '@/lib/types';
 import { useAuth } from '@/lib/auth-context';
+import { isDocumentOwner } from '@/lib/permissions';
 
 interface ShareModalProps {
   document: Document | null;
@@ -197,17 +198,13 @@ export default function ShareModal({ document: doc, isOpen, onClose, onUpdateDoc
     }
   };
 
-  const isOwner =
-    !doc.ownerEmail ||
-    !user ||
-    doc.ownerEmail.toLowerCase() === user.email.toLowerCase() ||
-    (doc.ownerId && doc.ownerId === user.userId);
+  const isOwner = isDocumentOwner(doc, user?.email, user?.userId);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150">
-      <div className="bg-white dark:bg-neutral-900 rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-neutral-200 dark:border-neutral-800 space-y-6 max-h-[90vh] overflow-y-auto">
+      <div className="bg-white dark:bg-neutral-900 rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-neutral-200 dark:border-neutral-800 space-y-5 max-h-[90vh] overflow-y-auto">
         {/* Header */}
-        <div className="flex items-center justify-between pb-4 border-b border-neutral-100 dark:border-neutral-800">
+        <div className="flex items-center justify-between pb-3 border-b border-neutral-100 dark:border-neutral-800">
           <div>
             <h3 className="text-lg font-semibold text-neutral-900 dark:text-neutral-100">
               Share Document
@@ -224,12 +221,157 @@ export default function ShareModal({ document: doc, isOpen, onClose, onUpdateDoc
           </button>
         </div>
 
-        {/* 1. Share with Specific People (Collaborator ACL) */}
-        <div className="space-y-3">
+        {/* 1. Document Visibility */}
+        <div className="space-y-2">
+          <label className="text-xs font-semibold text-neutral-700 dark:text-neutral-300 uppercase tracking-wider block">
+            Document Visibility
+          </label>
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              type="button"
+              disabled={!isOwner}
+              onClick={() => handleToggleVisibility(false)}
+              className={`flex items-start gap-3 p-3 rounded-xl border text-left transition-colors cursor-pointer disabled:cursor-not-allowed ${
+                !isPublic
+                  ? 'border-amber-500 bg-amber-50/60 dark:bg-amber-950/30 text-amber-950 dark:text-amber-200 ring-1 ring-amber-500/30'
+                  : 'border-neutral-200 dark:border-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-800 text-neutral-600 dark:text-neutral-400'
+              }`}
+            >
+              <Lock className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+              <div>
+                <div className="text-xs font-semibold flex items-center gap-1.5">
+                  <span>Private</span>
+                  {!isPublic && (
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                  )}
+                </div>
+                <div className="text-[11px] opacity-75 mt-0.5 leading-tight">
+                  Only you and invited collaborators can access
+                </div>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              disabled={!isOwner}
+              onClick={() => handleToggleVisibility(true)}
+              className={`flex items-start gap-3 p-3 rounded-xl border text-left transition-colors cursor-pointer disabled:cursor-not-allowed ${
+                isPublic
+                  ? 'border-emerald-500 bg-emerald-50/60 dark:bg-emerald-950/30 text-emerald-950 dark:text-emerald-200 ring-1 ring-emerald-500/30'
+                  : 'border-neutral-200 dark:border-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-800 text-neutral-600 dark:text-neutral-400'
+              }`}
+            >
+              <Globe className="w-5 h-5 text-emerald-500 shrink-0 mt-0.5" />
+              <div>
+                <div className="text-xs font-semibold flex items-center gap-1.5">
+                  <span>Public</span>
+                  {isPublic && (
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                  )}
+                </div>
+                <div className="text-[11px] opacity-75 mt-0.5 leading-tight">
+                  Anyone with the link can view; listed in repository
+                </div>
+              </div>
+            </button>
+          </div>
+          {!isOwner && (
+            <p className="text-[11px] text-neutral-400 italic">
+              Only the document owner can change visibility settings.
+            </p>
+          )}
+        </div>
+
+        {/* 2. Share Link */}
+        <div className="pt-2 border-t border-neutral-100 dark:border-neutral-800 space-y-2">
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-semibold text-neutral-700 dark:text-neutral-300 uppercase tracking-wider block">
+              Share Link
+            </label>
+            {isPublic ? (
+              <span className="inline-flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
+                <Globe className="w-3 h-3" />
+                Public access
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 text-[11px] text-amber-600 dark:text-amber-400 font-medium">
+                <Lock className="w-3 h-3" />
+                Collaborators only
+              </span>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              readOnly
+              value={shareUrl}
+              className="flex-1 px-3 py-2 text-xs bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl font-mono text-neutral-800 dark:text-neutral-200 select-all outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <button
+              onClick={handleCopy}
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-medium transition-colors shadow-xs cursor-pointer shrink-0"
+            >
+              {copied ? (
+                <>
+                  <Check className="w-3.5 h-3.5" />
+                  <span>Copied</span>
+                </>
+              ) : (
+                <>
+                  <Copy className="w-3.5 h-3.5" />
+                  <span>Copy</span>
+                </>
+              )}
+            </button>
+          </div>
+
+          {!isPublic && (
+            <p className="text-[11px] text-amber-700 dark:text-amber-400 bg-amber-50/80 dark:bg-amber-950/40 p-2 rounded-lg border border-amber-200/60 dark:border-amber-800/40">
+              🔒 <strong>Private Link:</strong> Visitors opening this link must sign in with an invited collaborator account. Unauthorized users will see access denied.
+            </p>
+          )}
+
+          {/* Quick link action buttons */}
+          <div className="flex flex-wrap items-center gap-2 pt-1">
+            <a
+              href={shareUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300 transition-colors"
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+              <span>Open in New Tab</span>
+            </a>
+
+            <button
+              onClick={handleDownloadMarkdown}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300 transition-colors cursor-pointer"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Download .md</span>
+            </button>
+
+            {isOwner && (
+              <button
+                onClick={handleRegenerateToken}
+                disabled={isRegenerating}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors cursor-pointer disabled:opacity-50 ml-auto"
+                title="Revoke and generate a new token"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isRegenerating ? 'animate-spin' : ''}`} />
+                <span>Regenerate Link</span>
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* 3. Share with Specific People (Collaborator ACL) */}
+        <div className="pt-2 border-t border-neutral-100 dark:border-neutral-800 space-y-3">
           <div className="flex items-center justify-between">
             <label className="text-xs font-semibold text-neutral-700 dark:text-neutral-300 uppercase tracking-wider flex items-center gap-1.5">
               <Users className="w-3.5 h-3.5 text-blue-500" />
-              <span>Share with Specific People</span>
+              <span>Invited Collaborators</span>
             </label>
             <span className="text-[11px] text-neutral-400">Google accounts</span>
           </div>
@@ -327,122 +469,16 @@ export default function ShareModal({ document: doc, isOpen, onClose, onUpdateDoc
               ))
             ) : (
               <div className="p-3 text-center text-xs text-neutral-400">
-                No specific collaborators invited yet.
+                No collaborators invited yet.
               </div>
             )}
           </div>
         </div>
 
-        {/* 2. Public / Shareable Read-Only Link */}
-        <div className="pt-2 border-t border-neutral-100 dark:border-neutral-800 space-y-2">
-          <label className="text-xs font-semibold text-neutral-700 dark:text-neutral-300 uppercase tracking-wider block">
-            Public or Unlisted Share Link
-          </label>
-          <div className="flex items-center gap-2">
-            <input
-              type="text"
-              readOnly
-              value={shareUrl}
-              className="flex-1 px-3 py-2 text-xs bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl font-mono text-neutral-800 dark:text-neutral-200 select-all outline-none focus:ring-2 focus:ring-blue-500"
-            />
-            <button
-              onClick={handleCopy}
-              className="flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-medium transition-colors shadow-sm cursor-pointer shrink-0"
-            >
-              {copied ? (
-                <>
-                  <Check className="w-3.5 h-3.5" />
-                  <span>Copied</span>
-                </>
-              ) : (
-                <>
-                  <Copy className="w-3.5 h-3.5" />
-                  <span>Copy</span>
-                </>
-              )}
-            </button>
-          </div>
-        </div>
-
-        {/* Quick link action buttons */}
-        <div className="flex flex-wrap gap-2 pt-1">
-          <a
-            href={shareUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300 transition-colors"
-          >
-            <ExternalLink className="w-3.5 h-3.5" />
-            <span>Open in New Tab</span>
-          </a>
-
-          <button
-            onClick={handleDownloadMarkdown}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300 transition-colors cursor-pointer"
-          >
-            <Download className="w-3.5 h-3.5" />
-            <span>Download .md</span>
-          </button>
-
-          {isOwner && (
-            <button
-              onClick={handleRegenerateToken}
-              disabled={isRegenerating}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors cursor-pointer disabled:opacity-50 ml-auto"
-              title="Revoke and generate a new token"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${isRegenerating ? 'animate-spin' : ''}`} />
-              <span>Regenerate Link</span>
-            </button>
-          )}
-        </div>
-
-        {/* 3. Visibility Setting */}
-        {isOwner && (
-          <div className="pt-2 border-t border-neutral-100 dark:border-neutral-800 space-y-3">
-            <label className="text-xs font-semibold text-neutral-700 dark:text-neutral-300 uppercase tracking-wider block">
-              Repository Discoverability
-            </label>
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                type="button"
-                onClick={() => handleToggleVisibility(true)}
-                className={`flex items-start gap-3 p-3 rounded-xl border text-left transition-colors cursor-pointer ${
-                  isPublic
-                    ? 'border-blue-500 bg-blue-50/50 dark:bg-blue-950/20 text-blue-900 dark:text-blue-200'
-                    : 'border-neutral-200 dark:border-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-800 text-neutral-600 dark:text-neutral-400'
-                }`}
-              >
-                <Globe className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />
-                <div>
-                  <div className="text-xs font-semibold">Public in Repo</div>
-                  <div className="text-[11px] opacity-75 mt-0.5">Listed in dashboard & searchable by anyone</div>
-                </div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleToggleVisibility(false)}
-                className={`flex items-start gap-3 p-3 rounded-xl border text-left transition-colors cursor-pointer ${
-                  !isPublic
-                    ? 'border-blue-500 bg-blue-50/50 dark:bg-blue-950/20 text-blue-900 dark:text-blue-200'
-                    : 'border-neutral-200 dark:border-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-800 text-neutral-600 dark:text-neutral-400'
-                }`}
-              >
-                <Lock className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
-                <div>
-                  <div className="text-xs font-semibold">Unlisted / Restricted</div>
-                  <div className="text-[11px] opacity-75 mt-0.5">Only accessible via direct link or invited accounts</div>
-                </div>
-              </button>
-            </div>
-          </div>
-        )}
-
         {/* Security badge note */}
         <div className="flex items-center gap-2 p-3 bg-neutral-50 dark:bg-neutral-800/60 rounded-xl text-neutral-600 dark:text-neutral-400 text-xs">
           <ShieldCheck className="w-4 h-4 text-emerald-500 shrink-0" />
-          <span>Invited editors can edit document content. Viewers and visitor link holders have read-only access.</span>
+          <span>Invited editors can edit document content. Invited viewers can view private documents without edit permissions.</span>
         </div>
       </div>
     </div>

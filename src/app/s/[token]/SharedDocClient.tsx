@@ -7,6 +7,7 @@ import MarkdownRenderer from '@/components/MarkdownRenderer';
 import TableOfContents from '@/components/TableOfContents';
 import ThemeToggle from '@/components/ThemeToggle';
 import { formatDate, calculateReadingTime, countWords, formatExpiresIn } from '@/lib/utils';
+import { useAuth } from '@/lib/auth-context';
 import {
   Share2,
   Copy,
@@ -20,14 +21,86 @@ import {
   Globe,
   ArrowLeft,
   FileText,
+  Lock,
+  LogIn,
 } from 'lucide-react';
 
 interface SharedDocClientProps {
   document: Document;
+  accessDenied?: boolean;
 }
 
-export default function SharedDocClient({ document: doc }: SharedDocClientProps) {
+export default function SharedDocClient({ document: doc, accessDenied = false }: SharedDocClientProps) {
   const [copied, setCopied] = useState(false);
+  const { user, signInWithGoogle } = useAuth();
+
+  if (accessDenied) {
+    return (
+      <div className="min-h-screen bg-neutral-50/60 dark:bg-neutral-950 text-neutral-900 dark:text-neutral-100 flex flex-col">
+        <header className="sticky top-0 z-40 w-full border-b border-neutral-200/80 dark:border-neutral-800/80 bg-white/80 dark:bg-neutral-900/80 backdrop-blur-md">
+          <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
+            <Link href="/" className="flex items-center gap-2 group">
+              <div className="p-1.5 rounded-xl bg-blue-600 text-white shadow-xs group-hover:scale-105 transition-transform">
+                <Share2 className="w-4 h-4" />
+              </div>
+              <span className="font-bold text-sm tracking-tight text-neutral-900 dark:text-white">
+                Shareable
+              </span>
+            </Link>
+            <ThemeToggle />
+          </div>
+        </header>
+
+        <div className="flex-1 flex flex-col items-center justify-center p-6 text-center max-w-md mx-auto w-full px-4">
+          <div className="p-8 sm:p-10 rounded-3xl bg-white dark:bg-neutral-900 border border-neutral-200/80 dark:border-neutral-800/80 shadow-xl space-y-6 w-full text-center">
+            <div className="w-16 h-16 mx-auto rounded-2xl bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-900 flex items-center justify-center text-amber-600 dark:text-amber-400">
+              <Lock className="w-8 h-8" />
+            </div>
+            <div className="space-y-2">
+              <h2 className="text-xl font-bold text-neutral-900 dark:text-white">Private Document</h2>
+              <p className="text-xs text-neutral-500 dark:text-neutral-400 leading-relaxed">
+                This document is private. The owner has restricted access to invited collaborators.
+                {doc.ownerEmail && (
+                  <span className="block mt-2 font-mono text-[11px] text-neutral-400 bg-neutral-100 dark:bg-neutral-800/60 py-1 px-2 rounded-lg">
+                    Owner: {doc.ownerEmail}
+                  </span>
+                )}
+              </p>
+            </div>
+
+            {!user ? (
+              <div className="space-y-3 pt-2">
+                <p className="text-xs text-neutral-600 dark:text-neutral-400">
+                  Please sign in with your authorized Google account to view this document.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => signInWithGoogle()}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-medium text-sm transition-colors shadow-md cursor-pointer"
+                >
+                  <LogIn className="w-4 h-4" />
+                  <span>Sign in with Google</span>
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-3 pt-2">
+                <p className="text-xs text-neutral-500 dark:text-neutral-400">
+                  Signed in as <strong className="text-neutral-700 dark:text-neutral-200">{user.email}</strong>. This account does not have access.
+                </p>
+                <Link
+                  href="/"
+                  className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-neutral-900 dark:bg-white hover:bg-neutral-800 dark:hover:bg-neutral-100 text-white dark:text-neutral-900 font-medium text-sm transition-colors shadow-md"
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                  <span>Return to Dashboard</span>
+                </Link>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const handleCopyMarkdown = () => {
     navigator.clipboard.writeText(doc.content);

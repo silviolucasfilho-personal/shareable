@@ -1,5 +1,7 @@
 import { notFound } from 'next/navigation';
 import { getDocumentByShareToken, incrementViewCount } from '@/lib/storage';
+import { getAuthenticatedUser } from '@/lib/amplify-server-utils';
+import { canUserViewDocument } from '@/lib/permissions';
 import SharedDocClient from './SharedDocClient';
 
 interface SharedDocPageProps {
@@ -12,9 +14,12 @@ export async function generateMetadata({ params }: SharedDocPageProps) {
   if (!doc) {
     return { title: 'Shared Document Not Found - Shareable' };
   }
+  const caller = await getAuthenticatedUser();
+  const canView = canUserViewDocument(doc, caller?.email, caller?.userId);
+
   return {
-    title: `${doc.title} - Shareable`,
-    description: doc.content.slice(0, 160),
+    title: canView ? `${doc.title} - Shareable` : 'Private Document - Shareable',
+    description: canView ? doc.content.slice(0, 160) : 'This document is private.',
   };
 }
 
@@ -26,8 +31,20 @@ export default async function SharedDocPage({ params }: SharedDocPageProps) {
     notFound();
   }
 
+  const caller = await getAuthenticatedUser();
+  const canView = canUserViewDocument(doc, caller?.email, caller?.userId);
+
+  if (!canView) {
+    return (
+      <SharedDocClient
+        document={{ ...doc, content: '' }}
+        accessDenied={true}
+      />
+    );
+  }
+
   // Increment view count in S3
   await incrementViewCount(token);
 
-  return <SharedDocClient document={doc} />;
+  return <SharedDocClient document={doc} accessDenied={false} />;
 }

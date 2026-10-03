@@ -67,7 +67,7 @@ function parseDocumentContent(
   }
 
   let folder = overrides?.folder?.trim() || '';
-  let isPublic = overrides?.isPublic !== undefined && overrides.isPublic !== null ? overrides.isPublic : true;
+  let isPublic = overrides?.isPublic !== undefined && overrides.isPublic !== null ? overrides.isPublic : false;
   let ttl = overrides?.ttl !== undefined ? overrides.ttl : null;
   let expiresAt = overrides?.expiresAt !== undefined ? overrides.expiresAt : null;
   let content = rawText;
@@ -340,7 +340,7 @@ export async function POST(request: NextRequest) {
       const formTitle = (formData.get('title') as string | null) || headerTitle;
       const formTags = (formData.get('tags') as string | null) || headerTags;
       const formIsPublicStr = formData.get('isPublic') as string | null;
-      const formIsPublic = formIsPublicStr !== null ? formIsPublicStr !== 'false' : isPublicParam;
+      const formIsPublic = formIsPublicStr !== null ? formIsPublicStr === 'true' : isPublicParam;
       const formTtl = (formData.get('ttl') as string | null) || headerTtl;
       const formExpiresAt = (formData.get('expiresAt') as string | null) || headerExpiresAt;
 

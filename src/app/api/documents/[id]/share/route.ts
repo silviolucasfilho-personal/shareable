@@ -7,6 +7,7 @@ import {
   removeCollaborator,
 } from '@/lib/storage';
 import { getAuthenticatedUser } from '@/lib/amplify-server-utils';
+import { isDocumentOwner } from '@/lib/permissions';
 import { CollaboratorRole } from '@/lib/types';
 
 interface RouteContext {
@@ -26,17 +27,12 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
     const caller = await getAuthenticatedUser(request);
 
-    // If document is owned by a user, ensure only the owner can modify sharing & collaborators
-    if (doc.ownerEmail && caller) {
-      const isOwner =
-        doc.ownerEmail.toLowerCase() === caller.email.toLowerCase() ||
-        (doc.ownerId && doc.ownerId === caller.userId);
-      if (!isOwner) {
-        return NextResponse.json(
-          { success: false, error: 'Only the document owner can change sharing settings' },
-          { status: 403 }
-        );
-      }
+    // Ensure only the document owner (or admin) can modify sharing, visibility & collaborators
+    if (!isDocumentOwner(doc, caller?.email, caller?.userId)) {
+      return NextResponse.json(
+        { success: false, error: 'Only the document owner can change sharing settings' },
+        { status: 403 }
+      );
     }
 
     // 1. Add Collaborator

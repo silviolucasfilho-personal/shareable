@@ -4,6 +4,7 @@ import React from 'react';
 import Link from 'next/link';
 import { DocumentSummary } from '@/lib/types';
 import { formatRelativeTime, formatExpiresIn } from '@/lib/utils';
+import { isDocumentOwner, canUserEditDocument } from '@/lib/permissions';
 import {
   FileText,
   Share2,
@@ -35,19 +36,15 @@ export default function DocumentCard({
 }: DocumentCardProps) {
   const { user } = useAuth();
 
+  const isOwner = isDocumentOwner(doc, user?.email, user?.userId);
+  const canEdit = canUserEditDocument(doc, user?.email, user?.userId);
   const userEmail = user?.email?.toLowerCase();
-  const isOwner =
-    !doc.ownerEmail ||
-    !userEmail ||
-    doc.ownerEmail.toLowerCase() === userEmail ||
-    (doc.ownerId && doc.ownerId === user?.userId);
 
   const collaboratorInfo = userEmail
     ? doc.collaborators?.find((c) => c.email.toLowerCase() === userEmail)
     : undefined;
 
   const isSharedWithUser = Boolean(collaboratorInfo);
-  const canEdit = isOwner || collaboratorInfo?.role === 'editor';
 
   return (
     <div className="group relative flex flex-col justify-between rounded-2xl border border-neutral-200/90 dark:border-neutral-800/90 bg-white dark:bg-neutral-900 p-5 shadow-xs hover:shadow-md hover:border-neutral-300 dark:hover:border-neutral-700 transition-all duration-150">
@@ -104,10 +101,10 @@ export default function DocumentCard({
             ) : (
               <span
                 className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950/40 text-[11px] font-medium text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800/60"
-                title="Unlisted or restricted to invited people"
+                title="Private document - accessible only to you and invited collaborators"
               >
                 <Lock className="w-2.5 h-2.5" />
-                <span>Restricted</span>
+                <span>Private</span>
               </span>
             )}
 

@@ -112,7 +112,7 @@ export default function NewDocumentPage() {
     content: '',
     tags: [],
     folder: '',
-    isPublic: true,
+    isPublic: false,
     shareToken: '',
     viewCount: 0,
     createdAt: '',
