@@ -2,8 +2,9 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
-import { Share2, Plus, Upload, LogOut, User as UserIcon, ChevronDown } from 'lucide-react';
+import { Share2, Plus, Upload, LogOut, User as UserIcon, ChevronDown, Key } from 'lucide-react';
 import ThemeToggle from './ThemeToggle';
+import ApiTokenModal from './ApiTokenModal';
 import { useAuth } from '@/lib/auth-context';
 
 interface NavbarProps {
@@ -14,6 +15,7 @@ interface NavbarProps {
 export default function Navbar({ onOpenUpload, documentCount }: NavbarProps) {
   const { user, loading, signInWithGoogle, signOut } = useAuth();
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [isTokenModalOpen, setIsTokenModalOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -143,9 +145,20 @@ export default function Navbar({ onOpenUpload, documentCount }: NavbarProps) {
                       <button
                         onClick={() => {
                           setDropdownOpen(false);
+                          setIsTokenModalOpen(true);
+                        }}
+                        className="w-full flex items-center gap-2 px-4 py-2 text-xs text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800/60 transition-colors cursor-pointer text-left"
+                      >
+                        <Key className="w-4 h-4 text-blue-500" />
+                        <span>API Token (CLI)</span>
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          setDropdownOpen(false);
                           signOut();
                         }}
-                        className="w-full flex items-center gap-2 px-4 py-2 text-xs text-red-600 dark:text-red-400 hover:bg-neutral-50 dark:hover:bg-neutral-800/60 transition-colors cursor-pointer text-left"
+                        className="w-full flex items-center gap-2 px-4 py-2 text-xs text-red-600 dark:text-red-400 hover:bg-neutral-50 dark:hover:bg-neutral-800/60 transition-colors cursor-pointer text-left border-t border-neutral-100 dark:border-neutral-800"
                       >
                         <LogOut className="w-4 h-4" />
                         <span>Sign Out</span>
@@ -189,6 +202,11 @@ export default function Navbar({ onOpenUpload, documentCount }: NavbarProps) {
           <ThemeToggle />
         </div>
       </div>
+
+      <ApiTokenModal
+        isOpen={isTokenModalOpen}
+        onClose={() => setIsTokenModalOpen(false)}
+      />
     </header>
   );
 }

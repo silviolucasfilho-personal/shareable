@@ -11,6 +11,10 @@ TTL=""
 EXPIRES_AT=""
 IS_PUBLIC="false"
 OUTPUT_JSON=false
+TOKEN="${SHAREABLE_TOKEN:-${SHAREABLE_API_TOKEN:-}}"
+if [[ -z "$TOKEN" && -f "$HOME/.shareable/token" ]]; then
+  TOKEN="$(tr -d ' \n\r' < "$HOME/.shareable/token" 2>/dev/null || true)"
+fi
 
 usage() {
   cat << 'EOF'
@@ -28,6 +32,7 @@ Options:
   -e, --expires-at <iso>   Explicit ISO expiration date (e.g. 2026-10-15T00:00:00Z)
       --public             Make document public in repository
       --private            Make document private (default)
+  -k, --token <token>      Personal API token (or set SHAREABLE_TOKEN env var)
   -u, --url <url>          Shareable instance base URL (default: https://main.d1yv1vn3p51ec7.amplifyapp.com)
   -j, --json               Output raw JSON response
   -h, --help               Show this help message
@@ -74,6 +79,10 @@ while [[ $# -gt 0 ]]; do
     --private)
       IS_PUBLIC="false"
       shift
+      ;;
+    -k|--token)
+      TOKEN="$2"
+      shift 2
       ;;
     -u|--url)
       BASE_URL="${2%/}"
@@ -135,6 +144,7 @@ done
 [[ -n "$TTL" ]] && CURL_ARGS+=(-F "ttl=$TTL")
 [[ -n "$EXPIRES_AT" ]] && CURL_ARGS+=(-F "expiresAt=$EXPIRES_AT")
 [[ -n "$IS_PUBLIC" ]] && CURL_ARGS+=(-F "isPublic=$IS_PUBLIC")
+[[ -n "$TOKEN" ]] && CURL_ARGS+=(-H "Authorization: Bearer $TOKEN")
 
 API_URL="${BASE_URL%/}/api/upload"
 

@@ -2,7 +2,7 @@ import { Document, DocumentSummary, CreateDocumentInput, UpdateDocumentInput, Do
 import { generateSlug, generateShareToken, extractExcerpt, calculateReadingTime, countWords, calculateExpiresAt, isDocumentExpired } from './utils';
 import { getS3Engine, getStorageInfo } from './s3-client';
 import { getUserRole, calculateUserQuota, FREE_USER_DOC_LIMIT } from './roles';
-import { canUserViewDocument } from './permissions';
+import { isListedForUser } from './permissions';
 
 const INDEX_KEY = 'index/documents-index.json';
 
@@ -322,8 +322,9 @@ export async function getDocuments(filter: DocumentFilter = {}): Promise<Documen
 
   const { query, tag, folder, isPublic, sortBy = 'updated_desc', scope, userEmail, userId } = filter;
 
-  // Enforce privacy: Exclude private documents that the caller is not authorized to view
-  results = results.filter((d) => canUserViewDocument(d, userEmail, userId));
+  // Personal dashboards: only documents the caller owns or that were shared with them.
+  // Public documents of other users stay reachable by link but are never listed.
+  results = results.filter((d) => isListedForUser(d, userEmail, userId));
 
   if (scope === 'mine' && (userId || userEmail)) {
     const normalizedEmail = userEmail?.toLowerCase();
@@ -786,9 +787,17 @@ export async function incrementViewCount(shareToken: string): Promise<void> {
   }
 }
 
-export async function getAllTags(): Promise<{ tag: string; count: number }[]> {
+async function getListedIndex(userEmail?: string | null, userId?: string | null): Promise<DocumentSummary[]> {
   await purgeExpiredDocuments();
   const docs = await getIndex();
+  return docs.filter((d) => isListedForUser(d, userEmail, userId));
+}
+
+export async function getAllTags(
+  userEmail?: string | null,
+  userId?: string | null
+): Promise<{ tag: string; count: number }[]> {
+  const docs = await getListedIndex(userEmail, userId);
   const tagCountMap: Record<string, number> = {};
 
   for (const doc of docs) {
@@ -805,9 +814,11 @@ export async function getAllTags(): Promise<{ tag: string; count: number }[]> {
     .sort((a, b) => b.count - a.count);
 }
 
-export async function getAllFolders(): Promise<{ folder: string; count: number }[]> {
-  await purgeExpiredDocuments();
-  const docs = await getIndex();
+export async function getAllFolders(
+  userEmail?: string | null,
+  userId?: string | null
+): Promise<{ folder: string; count: number }[]> {
+  const docs = await getListedIndex(userEmail, userId);
   const folderCountMap: Record<string, number> = {};
 
   for (const doc of docs) {
@@ -823,11 +834,9 @@ export async function getAllFolders(): Promise<{ folder: string; count: number }
 }
 
 export async function getRepositoryStats(userEmail?: string | null, userId?: string | null) {
-  await purgeExpiredDocuments();
-  const docs = await getIndex();
-  const visibleDocs = docs.filter((d) => canUserViewDocument(d, userEmail, userId));
-  const tags = await getAllTags();
-  const folders = await getAllFolders();
+  const visibleDocs = await getListedIndex(userEmail, userId);
+  const tags = await getAllTags(userEmail, userId);
+  const folders = await getAllFolders(userEmail, userId);
 
   const totalDocuments = visibleDocs.length;
   const sharedDocuments = visibleDocs.filter((d) => d.isPublic).length;

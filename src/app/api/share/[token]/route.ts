@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDocumentByShareToken, incrementViewCount } from '@/lib/storage';
+import { getAuthenticatedUser } from '@/lib/amplify-server-utils';
+import { canUserViewDocument } from '@/lib/permissions';
 
 interface RouteContext {
   params: Promise<{ token: string }>;
@@ -12,6 +14,17 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
     if (!doc) {
       return NextResponse.json({ success: false, error: 'Shared document not found' }, { status: 404 });
+    }
+
+    // Private documents require the owner, an invited collaborator, or an admin.
+    if (!doc.isPublic) {
+      const caller = await getAuthenticatedUser(request);
+      if (!canUserViewDocument(doc, caller?.email, caller?.userId)) {
+        return NextResponse.json(
+          { success: false, error: 'This document is private.' },
+          { status: caller ? 403 : 401 }
+        );
+      }
     }
 
     // Increment view count asynchronously in S3

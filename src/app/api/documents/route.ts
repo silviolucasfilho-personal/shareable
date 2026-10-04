@@ -35,8 +35,8 @@ export async function GET(request: NextRequest) {
     const [documents, stats, tags, folders, userQuota] = await Promise.all([
       getDocuments(filter),
       getRepositoryStats(caller.email, caller.userId),
-      getAllTags(),
-      getAllFolders(),
+      getAllTags(caller.email, caller.userId),
+      getAllFolders(caller.email, caller.userId),
       canUserCreateDocument(caller.email, caller.userId, 0),
     ]);
 
@@ -104,9 +104,9 @@ export async function POST(request: NextRequest) {
       content: content || '',
       tags: Array.isArray(tags) ? tags : [],
       folder: typeof folder === 'string' ? folder : '',
-      isPublic: isPublic !== false,
-      ownerId: caller?.userId,
-      ownerEmail: caller?.email,
+      isPublic: isPublic === true,
+      ownerId: caller.userId,
+      ownerEmail: caller.email,
       collaborators: [],
       ttl,
       expiresAt,

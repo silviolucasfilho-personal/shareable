@@ -47,9 +47,9 @@ export function isDocumentCollaborator(
 
 /**
  * Checks if a user has permission to view a document.
- * - Public documents: Anyone can view.
+ * - Public documents: Anyone with the link can view.
  * - Private documents: Only the owner, invited collaborators, and Admins can view.
- * - Unowned legacy/system documents: Public fallback.
+ *   Private documents without an owner are visible to Admins only (never to everyone).
  */
 export function canUserViewDocument(
   doc: MinimalDocAuth,
@@ -57,11 +57,6 @@ export function canUserViewDocument(
   userId?: string | null
 ): boolean {
   if (doc.isPublic) return true;
-
-  // Unowned legacy sample documents
-  if (!doc.ownerEmail && !doc.ownerId && (!doc.collaborators || doc.collaborators.length === 0)) {
-    return true;
-  }
 
   if (!userEmail && !userId) return false;
 
@@ -89,4 +84,27 @@ export function canUserEditDocument(
 
   const { isCollaborator, role } = isDocumentCollaborator(doc, userEmail);
   return isCollaborator && role === 'editor';
+}
+
+/**
+ * Checks if a document should appear in a user's dashboard listing.
+ *
+ * Dashboards are personal: a user only sees documents they own and documents
+ * explicitly shared with them. Public documents of other users are reachable
+ * via their link but are never listed. This applies to Admins as well; Admins
+ * keep owner-level access when opening a document directly.
+ */
+export function isListedForUser(
+  doc: MinimalDocAuth,
+  userEmail?: string | null,
+  userId?: string | null
+): boolean {
+  if (!userEmail && !userId) return false;
+  const normalizedEmail = userEmail?.trim().toLowerCase();
+
+  if (userId && doc.ownerId && doc.ownerId === userId) return true;
+  if (normalizedEmail && doc.ownerEmail && doc.ownerEmail.trim().toLowerCase() === normalizedEmail) {
+    return true;
+  }
+  return isDocumentCollaborator(doc, userEmail).isCollaborator;
 }

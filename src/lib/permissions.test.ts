@@ -4,6 +4,7 @@ import {
   isDocumentCollaborator,
   canUserViewDocument,
   canUserEditDocument,
+  isListedForUser,
   MinimalDocAuth,
 } from './permissions';
 
@@ -48,6 +49,28 @@ describe('permissions utility', () => {
 
     it('allows Admin user to view private documents', () => {
       expect(canUserViewDocument(privateDoc, 'silviolucasfilho@gmail.com', 'admin-id')).toBe(true);
+    });
+  });
+
+  describe('isListedForUser (Option B Personal Dashboard)', () => {
+    it('lists document for owner', () => {
+      expect(isListedForUser(publicDoc, 'alice@example.com', 'user-alice')).toBe(true);
+      expect(isListedForUser(privateDoc, 'alice@example.com', 'user-alice')).toBe(true);
+    });
+
+    it('lists document for invited collaborators', () => {
+      expect(isListedForUser(privateDoc, 'bob@example.com', 'user-bob')).toBe(true);
+      expect(isListedForUser(privateDoc, 'charlie@example.com', 'user-charlie')).toBe(true);
+    });
+
+    it('does NOT list other users documents on someone elses dashboard even if public', () => {
+      expect(isListedForUser(publicDoc, 'stranger@example.com', 'user-stranger')).toBe(false);
+      expect(isListedForUser(publicDoc, 'silviolucasfilho2@gmail.com', 'user-2')).toBe(false);
+    });
+
+    it('does not list for unauthenticated callers', () => {
+      expect(isListedForUser(publicDoc, null, null)).toBe(false);
+      expect(isListedForUser(privateDoc, null, null)).toBe(false);
     });
   });
 

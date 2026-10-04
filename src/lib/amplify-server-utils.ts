@@ -6,6 +6,7 @@ import outputs from '../../amplify_outputs.json';
 
 import { UserRole } from './types';
 import { getUserRole } from './roles';
+import { resolveApiToken } from './api-tokens';
 
 const isAmplifyConfigured = Boolean(
   outputs &&
@@ -26,39 +27,53 @@ export interface ServerUserIdentity {
 }
 
 /**
- * Extracts authenticated user information from cookies/session in Next.js Server Components / Route Handlers.
- * Gracefully falls back to mock dev header if Amplify is not yet configured with live Cognito.
+ * Dev impersonation (x-dev-user-email header / dev_user_email cookie) is only
+ * honored outside production, or when Cognito is not configured at all.
+ * In production anyone could otherwise forge an identity with a single header.
+ */
+const allowDevImpersonation =
+  process.env.NODE_ENV !== 'production' || process.env.ALLOW_DEV_AUTH === 'true';
+
+function devIdentity(rawEmail: string): ServerUserIdentity {
+  const email = rawEmail.toLowerCase().trim();
+  return {
+    userId: `dev-${email}`,
+    email,
+    name: email.split('@')[0],
+    role: getUserRole(email),
+  };
+}
+
+/**
+ * Extracts authenticated user information in Next.js Server Components / Route Handlers.
+ * Order: Bearer API token → (dev only) dev header/cookie → Amplify Cognito session cookies.
  */
 export async function getAuthenticatedUser(request?: NextRequest): Promise<ServerUserIdentity | null> {
-  // Check for dev simulation header/cookie in local dev mode
-  if (request) {
-    const devUserHeader = request.headers.get('x-dev-user-email');
-    if (devUserHeader) {
-      const email = devUserHeader.toLowerCase().trim();
-      return {
-        userId: `dev-${email}`,
-        email,
-        name: email.split('@')[0],
-        role: getUserRole(email),
-      };
-    }
+  // 1. Personal API token (used by CLI tools such as the shareable-upload skill)
+  const authHeader = request?.headers.get('authorization');
+  if (authHeader && /^bearer\s+/i.test(authHeader)) {
+    const record = await resolveApiToken(authHeader.replace(/^bearer\s+/i, '').trim());
+    if (!record) return null; // An invalid token never falls back to other methods
+    return {
+      userId: record.userId,
+      email: record.email,
+      name: record.email.split('@')[0],
+      role: getUserRole(record.email),
+    };
   }
 
-  // Also check cookie for dev user if in development
-  try {
-    const cookieStore = await cookies();
-    const devCookie = cookieStore.get('dev_user_email');
-    if (devCookie?.value) {
-      const email = devCookie.value.toLowerCase().trim();
-      return {
-        userId: `dev-${email}`,
-        email,
-        name: email.split('@')[0],
-        role: getUserRole(email),
-      };
+  // 2. Dev simulation (local development only)
+  if (allowDevImpersonation || !isAmplifyConfigured) {
+    const devUserHeader = request?.headers.get('x-dev-user-email');
+    if (devUserHeader) return devIdentity(devUserHeader);
+
+    try {
+      const cookieStore = await cookies();
+      const devCookie = cookieStore.get('dev_user_email');
+      if (devCookie?.value) return devIdentity(devCookie.value);
+    } catch {
+      // cookies() may fail if called outside server context
     }
-  } catch {
-    // cookies() may fail if called outside server context
   }
 
   if (!isAmplifyConfigured) {
