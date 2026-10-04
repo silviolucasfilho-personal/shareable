@@ -45,4 +45,19 @@ describe('MarkdownEditor initial view', () => {
 
     expect(screen.getByPlaceholderText('Write your markdown or HTML content here... # Headers, **bold**, <table>, ```code```, $$math$$')).toBeInTheDocument();
   });
+
+  it('disables write and split view options when readOnly is true', () => {
+    const { fireEvent } = require('@testing-library/react');
+    render(<MarkdownEditor initialDocument={existingDocument} onSave={vi.fn()} readOnly={true} />);
+
+    const writeBtn = screen.getByRole('button', { name: /write/i });
+    const splitBtn = screen.getByRole('button', { name: /split view/i });
+
+    expect(writeBtn).toBeDisabled();
+    expect(splitBtn).toBeDisabled();
+
+    // Clicking write button does not switch into write mode
+    fireEvent.click(writeBtn);
+    expect(screen.queryByPlaceholderText('Write your markdown or HTML content here... # Headers, **bold**, <table>, ```code```, $$math$$')).not.toBeInTheDocument();
+  });
 });

@@ -89,9 +89,9 @@ export default function MarkdownEditor({
     isMobileServerSnapshot
   );
   const [selectedViewMode, setSelectedViewMode] = useState<ViewMode | null>(null);
-  const viewMode = selectedViewMode ?? (
-    readOnly || initialDocument ? 'preview' : isMobile ? 'edit' : 'split'
-  );
+  const viewMode: ViewMode = readOnly
+    ? 'preview'
+    : (selectedViewMode ?? (initialDocument ? 'preview' : isMobile ? 'edit' : 'split'));
   const [isSaving, setIsSaving] = useState(false);
   const [isSaved, setIsSaved] = useState(true);
   const [copied, setCopied] = useState(false);
@@ -274,28 +274,39 @@ export default function MarkdownEditor({
         {/* View mode switcher */}
         <div className="flex items-center p-1 bg-neutral-100 dark:bg-neutral-800 rounded-xl">
           <button
-            onClick={() => setSelectedViewMode('edit')}
-            className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
-              viewMode === 'edit'
-                ? 'bg-white dark:bg-neutral-700 text-neutral-900 dark:text-white shadow-xs'
-                : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'
+            type="button"
+            disabled={readOnly}
+            onClick={() => !readOnly && setSelectedViewMode('edit')}
+            title={readOnly ? 'Write disabled (viewer permission only)' : 'Write markdown'}
+            className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-medium transition-colors ${
+              readOnly
+                ? 'opacity-40 cursor-not-allowed text-neutral-400 dark:text-neutral-500'
+                : viewMode === 'edit'
+                ? 'bg-white dark:bg-neutral-700 text-neutral-900 dark:text-white shadow-xs cursor-pointer'
+                : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white cursor-pointer'
             }`}
           >
-            <Edit className="w-3.5 h-3.5" />
+            {readOnly ? <Lock className="w-3.5 h-3.5" /> : <Edit className="w-3.5 h-3.5" />}
             <span>Write</span>
           </button>
           <button
-            onClick={() => setSelectedViewMode('split')}
-            className={`hidden md:flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
-              viewMode === 'split'
-                ? 'bg-white dark:bg-neutral-700 text-neutral-900 dark:text-white shadow-xs'
-                : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'
+            type="button"
+            disabled={readOnly}
+            onClick={() => !readOnly && setSelectedViewMode('split')}
+            title={readOnly ? 'Split view disabled (viewer permission only)' : 'Side-by-side edit and preview'}
+            className={`hidden md:flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-medium transition-colors ${
+              readOnly
+                ? 'opacity-40 cursor-not-allowed text-neutral-400 dark:text-neutral-500'
+                : viewMode === 'split'
+                ? 'bg-white dark:bg-neutral-700 text-neutral-900 dark:text-white shadow-xs cursor-pointer'
+                : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white cursor-pointer'
             }`}
           >
             <Split className="w-3.5 h-3.5" />
             <span>Split View</span>
           </button>
           <button
+            type="button"
             onClick={() => setSelectedViewMode('preview')}
             className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
               viewMode === 'preview'
@@ -654,9 +665,11 @@ export default function MarkdownEditor({
               <textarea
                 ref={textareaRef}
                 value={content}
+                disabled={readOnly}
+                readOnly={readOnly}
                 onChange={(e) => setContent(e.target.value)}
                 placeholder="Write your markdown or HTML content here... # Headers, **bold**, <table>, ```code```, $$math$$"
-                className="w-full flex-1 p-2 font-mono text-sm leading-relaxed bg-transparent border-none outline-none resize-none text-neutral-900 dark:text-neutral-100 placeholder-neutral-400 selection:bg-blue-100 dark:selection:bg-blue-900/60"
+                className="w-full flex-1 p-2 font-mono text-sm leading-relaxed bg-transparent border-none outline-none resize-none text-neutral-900 dark:text-neutral-100 placeholder-neutral-400 selection:bg-blue-100 dark:selection:bg-blue-900/60 disabled:cursor-not-allowed"
               />
             </div>
           )}
