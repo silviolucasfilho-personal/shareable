@@ -459,19 +459,20 @@ export async function POST(request: NextRequest) {
     }
 
     const caller = await getAuthenticatedUser(request);
-    if (!caller) {
+    const ownerEmail = caller?.email?.trim().toLowerCase();
+    if (!caller || !ownerEmail) {
       return NextResponse.json(
         {
           success: false,
           error:
-            'Authentication required. Sign in, or send "Authorization: Bearer <token>" with a personal API token (account menu → API token).',
+            'Upload rejected: an explicit owner is required. Sign in, or provide "Authorization: Bearer <token>" with a personal API token.',
         },
         { status: 401, headers: corsHeaders }
       );
     }
 
     // Enforce role-based document limit (Free users can keep up to 3 documents)
-    const quotaCheck = await canUserCreateDocument(caller.email, caller.userId, toCreate.length);
+    const quotaCheck = await canUserCreateDocument(ownerEmail, caller.userId, toCreate.length);
     if (!quotaCheck.allowed) {
       return NextResponse.json(
         {
@@ -497,8 +498,8 @@ export async function POST(request: NextRequest) {
         isPublic: docInput.isPublic,
         ttl: docInput.ttl,
         expiresAt: docInput.expiresAt,
-        ownerId: caller?.userId,
-        ownerEmail: caller?.email,
+        ownerId: caller.userId,
+        ownerEmail: ownerEmail,
       });
       createdDocs.push(doc);
     }

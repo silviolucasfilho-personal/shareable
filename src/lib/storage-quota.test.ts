@@ -1,7 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { canUserCreateDocument } from './storage';
+import { canUserCreateDocument, createDocument } from './storage';
 
 describe('Storage Quota Enforcement', () => {
+  it('strictly rejects document creation without an explicit owner', async () => {
+    // @ts-expect-error testing missing ownerEmail at runtime
+    await expect(createDocument({ title: 'No Owner', content: 'Test' })).rejects.toThrow(
+      'An explicit document owner (ownerEmail) is required'
+    );
+
+    await expect(
+      createDocument({ title: 'Empty Owner', content: 'Test', ownerEmail: '   ' })
+    ).rejects.toThrow('An explicit document owner (ownerEmail) is required');
+  });
+
   it('allows ADMIN to create unlimited documents', async () => {
     const adminCheck = await canUserCreateDocument('silviolucasfilho@gmail.com', 'admin-id', 1);
     expect(adminCheck.allowed).toBe(true);

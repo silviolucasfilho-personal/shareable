@@ -109,6 +109,7 @@ describe('TTL Utilities', () => {
         title: 'TTL Test Doc',
         content: '# Test',
         ttl: '1h',
+        ownerEmail: 'silviolucasfilho@gmail.com',
       });
 
       expect(doc.expiresAt).toBeDefined();
@@ -124,6 +125,7 @@ describe('TTL Utilities', () => {
         title: 'Already Expired Doc',
         content: '# Expired content',
         expiresAt: pastDate,
+        ownerEmail: 'silviolucasfilho@gmail.com',
       });
 
       expect(expiredDoc.id).toBeDefined();
@@ -142,6 +144,7 @@ describe('TTL Utilities', () => {
         title: 'Update TTL Test',
         content: '# Content',
         ttl: '1h',
+        ownerEmail: 'silviolucasfilho@gmail.com',
       });
       expect(doc.expiresAt).not.toBeNull();
 

@@ -1,7 +1,7 @@
 import { Document, DocumentSummary, CreateDocumentInput, UpdateDocumentInput, DocumentFilter, UserRole, UserQuota } from './types';
 import { generateSlug, generateShareToken, extractExcerpt, calculateReadingTime, countWords, calculateExpiresAt, isDocumentExpired } from './utils';
 import { getS3Engine, getStorageInfo } from './s3-client';
-import { getUserRole, calculateUserQuota, FREE_USER_DOC_LIMIT } from './roles';
+import { getUserRole, calculateUserQuota, FREE_USER_DOC_LIMIT, getAdminEmails, DEFAULT_ADMIN_EMAIL } from './roles';
 import { isListedForUser } from './permissions';
 
 const INDEX_KEY = 'index/documents-index.json';
@@ -238,6 +238,8 @@ Standards and conventions for designing robust, scalable RESTful services.
     const id = crypto.randomUUID();
     const shareToken = generateShareToken();
 
+    const adminEmail = getAdminEmails()[0] || DEFAULT_ADMIN_EMAIL;
+
     const doc: Document = {
       id,
       slug: sample.slug,
@@ -250,6 +252,7 @@ Standards and conventions for designing robust, scalable RESTful services.
       viewCount: 0,
       createdAt: now,
       updatedAt: now,
+      ownerEmail: adminEmail,
     };
 
     // 1. Save markdown content in S3
@@ -283,6 +286,7 @@ Standards and conventions for designing robust, scalable RESTful services.
       readingTimeMinutes: calculateReadingTime(sample.content),
       createdAt: now,
       updatedAt: now,
+      ownerEmail: adminEmail,
     });
   }
 
@@ -520,12 +524,15 @@ export async function canUserCreateDocument(
 export async function createDocument(input: CreateDocumentInput): Promise<Document> {
   await ensureStorageInitialized();
 
+  const ownerEmail = input.ownerEmail?.trim().toLowerCase();
+  if (!ownerEmail) {
+    throw new Error('An explicit document owner (ownerEmail) is required to create or upload a document.');
+  }
+
   // Enforce document limits based on user role (ADMIN vs FREE_USER)
-  if (input.ownerEmail || input.ownerId) {
-    const quotaCheck = await canUserCreateDocument(input.ownerEmail, input.ownerId, 1);
-    if (!quotaCheck.allowed) {
-      throw new Error(quotaCheck.error || 'Document limit exceeded for Free users');
-    }
+  const quotaCheck = await canUserCreateDocument(ownerEmail, input.ownerId, 1);
+  if (!quotaCheck.allowed) {
+    throw new Error(quotaCheck.error || 'Document limit exceeded for Free users');
   }
 
   const engine = getS3Engine();
@@ -541,7 +548,6 @@ export async function createDocument(input: CreateDocumentInput): Promise<Docume
   const isPublic = input.isPublic !== false;
 
   const ownerId = input.ownerId;
-  const ownerEmail = input.ownerEmail;
   const collaborators = input.collaborators || [];
   const expiresAt = input.expiresAt
     ? (calculateExpiresAt(input.expiresAt) || input.expiresAt)

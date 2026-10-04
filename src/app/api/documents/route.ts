@@ -67,15 +67,16 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const caller = await getAuthenticatedUser(request);
-    if (!caller) {
+    const ownerEmail = caller?.email?.trim().toLowerCase();
+    if (!caller || !ownerEmail) {
       return NextResponse.json(
-        { success: false, error: 'Authentication required. Please sign in.' },
+        { success: false, error: 'Document creation rejected: an explicit owner is required. Please sign in.' },
         { status: 401 }
       );
     }
 
     // Role-based quota enforcement: Free users can keep up to 3 documents
-    const quotaCheck = await canUserCreateDocument(caller.email, caller.userId, 1);
+    const quotaCheck = await canUserCreateDocument(ownerEmail, caller.userId, 1);
     if (!quotaCheck.allowed) {
       return NextResponse.json(
         {
@@ -106,7 +107,7 @@ export async function POST(request: NextRequest) {
       folder: typeof folder === 'string' ? folder : '',
       isPublic: isPublic === true,
       ownerId: caller.userId,
-      ownerEmail: caller.email,
+      ownerEmail: ownerEmail,
       collaborators: [],
       ttl,
       expiresAt,

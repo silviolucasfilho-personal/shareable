@@ -68,7 +68,7 @@ export interface CreateDocumentInput {
   folder?: string;
   isPublic?: boolean;
   ownerId?: string;
-  ownerEmail?: string;
+  ownerEmail: string; // Explicit owner is strictly required
   collaborators?: Collaborator[];
   expiresAt?: string | null;
   ttl?: string | null;
